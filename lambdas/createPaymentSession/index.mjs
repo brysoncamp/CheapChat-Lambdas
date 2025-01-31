@@ -6,8 +6,24 @@ const secretsClient = new SecretsManagerClient({ region: "us-east-1" });
 let stripe;
 
 export const handler = async (event) => {
+    console.log("Received event:", JSON.stringify(event, null, 2));
+
+    // ✅ Handle OPTIONS preflight request for CORS
+    if (event.requestContext.http.method === "OPTIONS") {
+        return {
+            statusCode: 200,
+            headers: {
+                "Access-Control-Allow-Origin": "http://localhost:3000, https://cheap.chat",
+                "Access-Control-Allow-Methods": "OPTIONS, POST, GET",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                "Access-Control-Max-Age": "86400" // Cache for 24 hours
+            },
+            body: ""
+        };
+    }
+
     try {
-        // Fetch Stripe Secret Key from Secrets Manager
+        // ✅ Fetch Stripe Secret Key from AWS Secrets Manager
         const command = new GetSecretValueCommand({
             SecretId: "StripeSecrets" // Change this to match your secret name in AWS
         });
@@ -15,7 +31,7 @@ export const handler = async (event) => {
         const secretData = await secretsClient.send(command);
         const secretString = secretData.SecretString;
 
-        // Parse secret value (Handles JSON format)
+        // ✅ Parse secret value (Handles JSON format)
         const parsedSecret = JSON.parse(secretString);
         const STRIPE_SECRET_KEY = parsedSecret.STRIPE_SECRET_KEY || secretString; // Adjust if your secret is plain text
 
@@ -23,11 +39,11 @@ export const handler = async (event) => {
             stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
         }
 
-        // Parse request body
+        // ✅ Parse request body
         const { amount, userId } = JSON.parse(event.body);
         const amountInCents = Math.round(amount * 100);
 
-        // Create Stripe Checkout Session
+        // ✅ Create Stripe Checkout Session
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             mode: "payment",
@@ -47,9 +63,28 @@ export const handler = async (event) => {
             metadata: { userId }
         });
 
-        return { statusCode: 200, body: JSON.stringify({ id: session.id }) };
+        return {
+            statusCode: 200,
+            headers: {
+                "Access-Control-Allow-Origin": "http://localhost:3000, https://cheap.chat",
+                "Access-Control-Allow-Methods": "OPTIONS, POST, GET",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                "Access-Control-Max-Age": "86400"
+            },
+            body: JSON.stringify({ id: session.id })
+        };
     } catch (error) {
         console.error("Error processing payment:", error);
-        return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+
+        return {
+            statusCode: 500,
+            headers: {
+                "Access-Control-Allow-Origin": "http://localhost:3000, https://cheap.chat",
+                "Access-Control-Allow-Methods": "OPTIONS, POST, GET",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                "Access-Control-Max-Age": "86400"
+            },
+            body: JSON.stringify({ error: error.message })
+        };
     }
 };
