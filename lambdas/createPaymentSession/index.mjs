@@ -52,7 +52,7 @@ export const handler = async (event) => {
         // ✅ Create Stripe Checkout Session
         console.log(`💳 Creating Stripe session for ${amount} USD (User: ${userId})...`);
         const session = await stripe.checkout.sessions.create({
-            payment_method_types: ["card", "apple_pay", "google_pay"],
+            payment_method_types: ["card"],
             mode: "payment",
             currency: "usd",
             line_items: [
