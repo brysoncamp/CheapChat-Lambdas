@@ -18,7 +18,7 @@ export const handler = async (event) => {
                 "Access-Control-Allow-Headers": "Content-Type, Authorization",
                 "Access-Control-Max-Age": "86400" // Cache for 24 hours
             },
-            body: ""
+            body: "Hello"
         };
     }
 
