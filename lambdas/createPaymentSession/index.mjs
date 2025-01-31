@@ -59,7 +59,11 @@ export const handler = async (event) => {
                 {
                     price_data: {
                         currency: "usd",
-                        product_data: { name: "CheapChat Credits" },
+                        product_data: { 
+                            name: "CheapChat Credits",
+                            description: "Buy credits to send messages on CheapChat",
+                            images: ["https://e7.pngegg.com/pngimages/546/340/png-clipart-livechat-online-chat-logo-computer-icons-live-chat-miscellaneous-face-thumbnail.png"]
+                        },
                         unit_amount: amountInCents
                     },
                     quantity: 1
