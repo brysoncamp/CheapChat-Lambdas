@@ -32,11 +32,15 @@ jobs:
           cd lambdas/${{ matrix.function }}
           zip -r ../../${{ matrix.function }}.zip . -x "node_modules/*"
 
-      - name: Deploy to AWS Lambda
-        uses: aws-actions/aws-lambda-deploy@v1
-        with:
-          function-name: ${{ matrix.function }}  # Matches AWS Lambda function name
-          zip-file: ${{ matrix.function }}.zip
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Configure AWS CLI
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set region ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to AWS Lambda using AWS CLI
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ matrix.function }} \
+            --zip-file fileb://${{ matrix.function }}.zip \
+            --region ${{ secrets.AWS_REGION }}
