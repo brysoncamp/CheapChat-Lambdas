@@ -1,0 +1,8 @@
+# Ignore node_modules inside each Lambda folder
+lambdas/*/node_modules
+
+# Ignore zip files (used for deployment)
+*.zip
+
+# Ignore AWS environment files
+.env
