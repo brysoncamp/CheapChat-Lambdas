@@ -30,7 +30,7 @@ jobs:
       - name: Zip the Lambda function
         run: |
           cd lambdas/${{ matrix.function }}
-          zip -r ../../${{ matrix.function }}.zip . -x "node_modules/*"
+          zip -r ../../${{ matrix.function }}.zip .
 
       - name: Configure AWS CLI
         run: |
