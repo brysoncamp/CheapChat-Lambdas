@@ -9,7 +9,7 @@ export const handler = async (event) => {
     try {
         // Fetch Stripe Secret Key from Secrets Manager
         const command = new GetSecretValueCommand({
-            SecretId: "StripeSecrets-RhCaMe" // Change this to match your secret name in AWS
+            SecretId: "StripeSecrets" // Change this to match your secret name in AWS
         });
 
         const secretData = await secretsClient.send(command);
