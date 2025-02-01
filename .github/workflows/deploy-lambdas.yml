@@ -12,6 +12,7 @@ jobs:
       matrix:
         function:
           - createPaymentSession
+          - preflightCORSHandler
 
     steps:
       - name: Checkout code
