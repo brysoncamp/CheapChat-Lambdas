@@ -72,38 +72,37 @@ export const handler = async (event) => {
     }
 };
 
-/**
- * ✅ Handle Successful Payments (Adds Credits)
- */
 async function handleSuccessfulPayment(session) {
     const userId = session.metadata?.userId;
     const credits = session.amount_total / 100;
     const transactionId = session.id;
-    const chargeId = session.charge || null;
     const timestamp = new Date().toISOString();
-    
 
-    console.log(`✅ Payment received: User ID: ${userId}, Credits: ${credits}`);
+    let chargeId = session.charge;  // ✅ Attempt to get charge ID directly
+    let paymentIntentId = session.payment_intent;  // ✅ Use PaymentIntent to fetch charge if needed
 
-    // ✅ Add transaction to CreditTransactions
+    if (!chargeId && paymentIntentId) {
+        console.log(`🔄 Retrieving charge ID from PaymentIntent: ${paymentIntentId}`);
+
+        // ✅ Retrieve payment intent from Stripe to find chargeId
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        chargeId = paymentIntent.latest_charge || null;
+    }
+
+    console.log(`✅ Payment received: User ID: ${userId}, Credits: ${credits}, Charge ID: ${chargeId}`);
+
+    // ✅ Store transaction with Charge ID (if available)
     await dynamoDB.put({
         TableName: "CreditTransactions",
         Item: {
             transactionId,
             userId,
-            chargeId,
             type: "credit_added",
             amount: credits,
-            timestamp
+            timestamp,
+            chargeId,  // ✅ Store the charge ID after fetching it properly
+            paymentIntentId // ✅ Store this for debugging if needed
         }
-    }).promise();
-
-    // ✅ Update User's Credits
-    await dynamoDB.update({
-        TableName: "Users",
-        Key: { userId },
-        UpdateExpression: "SET currentCredits = currentCredits + :credits",
-        ExpressionAttributeValues: { ":credits": credits }
     }).promise();
 }
 
