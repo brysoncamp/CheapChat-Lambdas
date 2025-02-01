@@ -80,7 +80,10 @@ export const handler = async (event) => {
             ],
             success_url: `https://cheap.chat/success?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `https://cheap.chat/cancel`,
-            metadata: { userEmail } // ✅ Store user email in Stripe metadata
+            metadata: { 
+                userId: decoded?.sub,  //  (unique user ID)
+                userEmail: userEmail
+            }
         });
 
         console.log("✅ Stripe session created:", session.id);
