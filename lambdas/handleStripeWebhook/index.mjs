@@ -79,7 +79,9 @@ async function handleSuccessfulPayment(session) {
     const userId = session.metadata?.userId;
     const credits = session.amount_total / 100;
     const transactionId = session.id;
+    const invoiceId = session.invoice || null;
     const timestamp = new Date().toISOString();
+    
 
     console.log(`✅ Payment received: User ID: ${userId}, Credits: ${credits}`);
 
@@ -89,6 +91,7 @@ async function handleSuccessfulPayment(session) {
         Item: {
             transactionId,
             userId,
+            invoiceId,
             type: "credit_added",
             amount: credits,
             timestamp
