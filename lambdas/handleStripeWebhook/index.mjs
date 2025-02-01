@@ -76,22 +76,27 @@ async function handleSuccessfulPayment(session) {
     const userId = session.metadata?.userId;
     const credits = session.amount_total / 100;
     const transactionId = session.id;
+    const paymentIntentId = session.payment_intent;
     const timestamp = new Date().toISOString();
 
-    let chargeId = session.charge;  // ✅ Attempt to get charge ID directly
-    let paymentIntentId = session.payment_intent;  // ✅ Use PaymentIntent to fetch charge if needed
+    let chargeId = session.charge || null;
+    let receiptUrl = null;
 
+    // ✅ Fetch Charge ID if missing
     if (!chargeId && paymentIntentId) {
-        console.log(`🔄 Retrieving charge ID from PaymentIntent: ${paymentIntentId}`);
-
-        // ✅ Retrieve payment intent from Stripe to find chargeId
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
         chargeId = paymentIntent.latest_charge || null;
     }
 
-    console.log(`✅ Payment received: User ID: ${userId}, Credits: ${credits}, Charge ID: ${chargeId}`);
+    // ✅ Fetch Public Receipt URL if Charge ID exists
+    if (chargeId) {
+        const charge = await stripe.charges.retrieve(chargeId);
+        receiptUrl = charge.receipt_url || null;
+    }
 
-    // ✅ Store transaction with Charge ID (if available)
+    console.log(`✅ Payment received: User ID: ${userId}, Credits: ${credits}, Receipt: ${receiptUrl}`);
+
+    // ✅ Store only `receiptUrl` in DynamoDB
     await dynamoDB.put({
         TableName: "CreditTransactions",
         Item: {
@@ -100,11 +105,11 @@ async function handleSuccessfulPayment(session) {
             type: "credit_added",
             amount: credits,
             timestamp,
-            chargeId,  // ✅ Store the charge ID after fetching it properly
-            paymentIntentId // ✅ Store this for debugging if needed
+            receiptUrl // ✅ Store only this
         }
     }).promise();
 }
+
 
 /**
  * ✅ Handle Refunds (Removes Credits)
