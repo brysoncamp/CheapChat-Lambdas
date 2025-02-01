@@ -3,7 +3,7 @@ name: Deploy AWS Lambdas
 on:
   push:
     branches:
-      - main  # Deploy only when pushing to the main branch
+      - main 
 
 jobs:
   deploy:
@@ -14,6 +14,7 @@ jobs:
           - createPaymentSession
           - preflightCORSHandler
           - cognitoUserSync
+          - handleStripeWebhook
 
     steps:
       - name: Checkout code
