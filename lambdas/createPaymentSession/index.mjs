@@ -29,7 +29,7 @@ export const handler = async (event) => {
         const decoded = jwt.decode(token); // Decode without verification (trusted via API Gateway)
         console.log("🔍 Decoded Token Payload:", JSON.stringify(decoded, null, 2));
 
-        
+
         const userEmail = decoded?.email || decoded?.["cognito:username"];
 
         if (!userEmail) {
@@ -64,6 +64,7 @@ export const handler = async (event) => {
             payment_method_types: ["card"],
             mode: "payment",
             currency: "usd",
+            customer_email: userEmail,
             line_items: [
                 {
                     price_data: {
