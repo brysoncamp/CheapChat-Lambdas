@@ -13,6 +13,7 @@ jobs:
         function:
           - createPaymentSession
           - preflightCORSHandler
+          - cognitoUserSync
 
     steps:
       - name: Checkout code
