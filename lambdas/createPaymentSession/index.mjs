@@ -27,6 +27,9 @@ export const handler = async (event) => {
         // ✅ Decode JWT to get user info
         const token = authHeader.split(" ")[1]; // Remove "Bearer" prefix
         const decoded = jwt.decode(token); // Decode without verification (trusted via API Gateway)
+        console.log("🔍 Decoded Token Payload:", JSON.stringify(decoded, null, 2));
+
+        
         const userEmail = decoded?.email || decoded?.["cognito:username"];
 
         if (!userEmail) {
