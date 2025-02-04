@@ -3,11 +3,26 @@ import AWS from "aws-sdk";
 const lambda = new AWS.Lambda();
 
 export const handler = async (event) => {
-  console.log("WebSocket Message Event:", JSON.stringify(event, null, 2));
+  console.log("🟢 WebSocket Message Event:", JSON.stringify(event, null, 2));
 
-  // 1️⃣ Extract connection ID & message
-  const connectionId = event.requestContext?.connectionId; // ✅ Ensure connectionId exists
-  const body = JSON.parse(event.body);
+  // 1️⃣ Extract connection ID safely
+  const connectionId = event.requestContext?.connectionId;
+
+  // 2️⃣ Ensure event.body exists before parsing
+  if (!event.body) {
+    console.error("❌ event.body is undefined, cannot parse JSON");
+    return { statusCode: 400, body: "Invalid request: Missing body" };
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body);
+  } catch (error) {
+    console.error("❌ JSON parsing error:", error);
+    return { statusCode: 400, body: "Invalid JSON format" };
+  }
+
+  // 3️⃣ Extract message & action
   const { action, message } = body;
 
   if (!message || !action || !connectionId) {
@@ -15,7 +30,7 @@ export const handler = async (event) => {
     return { statusCode: 400, body: "Invalid message format or missing connectionId" };
   }
 
-  // 2️⃣ Define routing logic based on "action" field
+  // 4️⃣ Define routing logic
   const lambdaFunctionMap = {
     openai: "openAIHandler",
     other: "otherAIHandler", // Example: Future AI integration
@@ -29,12 +44,12 @@ export const handler = async (event) => {
   }
 
   try {
-    // 3️⃣ Forward message & connectionId to the appropriate Lambda function
+    console.log(`🔹 Forwarding message to ${functionName}...`);
     const payload = { connectionId, message };
 
     await lambda.invoke({
       FunctionName: functionName,
-      InvocationType: "Event", // Asynchronous execution
+      InvocationType: "Event",
       Payload: JSON.stringify(payload),
     }).promise();
 
