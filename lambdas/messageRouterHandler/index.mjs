@@ -6,13 +6,13 @@ export const handler = async (event) => {
   console.log("WebSocket Message Event:", JSON.stringify(event, null, 2));
 
   // 1️⃣ Extract connection ID & message
-  const { connectionId } = event.requestContext;
+  const connectionId = event.requestContext?.connectionId; // ✅ Ensure connectionId exists
   const body = JSON.parse(event.body);
   const { action, message } = body;
 
-  if (!message || !action) {
-    console.error("Invalid message format");
-    return { statusCode: 400, body: "Invalid message format" };
+  if (!message || !action || !connectionId) {
+    console.error("❌ Invalid message format or missing connectionId");
+    return { statusCode: 400, body: "Invalid message format or missing connectionId" };
   }
 
   // 2️⃣ Define routing logic based on "action" field
@@ -24,12 +24,12 @@ export const handler = async (event) => {
   const functionName = lambdaFunctionMap[action];
 
   if (!functionName) {
-    console.error(`Unknown action: ${action}`);
+    console.error(`❌ Unknown action: ${action}`);
     return { statusCode: 400, body: `Unsupported action: ${action}` };
   }
 
   try {
-    // 3️⃣ Forward message to the appropriate Lambda function
+    // 3️⃣ Forward message & connectionId to the appropriate Lambda function
     const payload = { connectionId, message };
 
     await lambda.invoke({
@@ -38,7 +38,7 @@ export const handler = async (event) => {
       Payload: JSON.stringify(payload),
     }).promise();
 
-    console.log(`✅ Message forwarded to ${functionName}`);
+    console.log(`✅ Message forwarded to ${functionName} with connectionId: ${connectionId}`);
 
     return { statusCode: 200, body: `Message forwarded to ${functionName}` };
   } catch (error) {

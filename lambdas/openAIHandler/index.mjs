@@ -11,10 +11,7 @@ const apiGateway = new AWS.ApiGatewayManagementApi({
 
 // ✅ Fetch Secret (only if not cached)
 const getOpenAIKey = async () => {
-  if (cachedApiKey) {
-    console.log("✅ Using Cached OpenAI API Key");
-    return cachedApiKey;
-  }
+  if (cachedApiKey) return cachedApiKey;
 
   console.log("🔄 Fetching OpenAI API Key from Secrets Manager...");
   try {
@@ -31,7 +28,7 @@ const getOpenAIKey = async () => {
 };
 
 export const handler = async (event) => {
-  console.log("OpenAI Handler Event:", event);
+  console.log("OpenAI Handler Event:", JSON.stringify(event, null, 2));
 
   // ✅ Get cached API key or fetch it if not cached
   const apiKey = await getOpenAIKey();
@@ -39,8 +36,10 @@ export const handler = async (event) => {
 
   // ✅ Extract connection ID & message
   const { connectionId, message } = JSON.parse(event.body);
-  if (!message) {
-    return { statusCode: 400, body: "Invalid request" };
+
+  if (!message || !connectionId) {
+    console.error("❌ Invalid request: Missing message or connectionId");
+    return { statusCode: 400, body: "Invalid request: Missing message or connectionId" };
   }
 
   try {
