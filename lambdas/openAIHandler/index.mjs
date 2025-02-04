@@ -1,12 +1,12 @@
 import AWS from "aws-sdk";
-import { Configuration, OpenAIApi } from "openai";
+import OpenAI from "openai"; // ✅ Correct import for OpenAI SDK
 
 const secretsManager = new AWS.SecretsManager();
 let cachedApiKey = null; // 🔹 Cache OpenAI API Key
 
 // ✅ Initialize API Gateway Management for WebSocket Messaging
 const apiGateway = new AWS.ApiGatewayManagementApi({
-  endpoint: process.env.WEBSOCKET_ENDPOINT, // 🔹 This should be wss://ws.cheap.chat OR your AWS WebSocket API URL
+  endpoint: process.env.WEBSOCKET_ENDPOINT,
 });
 
 // ✅ Fetch Secret (only if not cached)
@@ -35,7 +35,7 @@ export const handler = async (event) => {
 
   // ✅ Get cached API key or fetch it if not cached
   const apiKey = await getOpenAIKey();
-  const openai = new OpenAIApi(new Configuration({ apiKey }));
+  const openai = new OpenAI({ apiKey });
 
   // ✅ Extract connection ID & message
   const { connectionId, message } = JSON.parse(event.body);
@@ -47,7 +47,7 @@ export const handler = async (event) => {
     console.log(`🔹 Sending message to OpenAI: ${message}`);
 
     // ✅ Call OpenAI API with streaming enabled
-    const response = await openai.createChatCompletion({
+    const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "user", content: message }],
       stream: true, // Enable streaming
@@ -56,7 +56,7 @@ export const handler = async (event) => {
     console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${connectionId}`);
 
     // ✅ Process OpenAI streaming response
-    for await (const chunk of response.data) {
+    for await (const chunk of response) {
       const text = chunk.choices?.[0]?.delta?.content || ""; // 🔹 Extract response text
 
       if (text) {
