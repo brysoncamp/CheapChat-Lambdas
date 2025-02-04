@@ -15,6 +15,7 @@ jobs:
           - preflightCORSHandler
           - cognitoUserSync
           - handleStripeWebhook
+          - webSocketConnectHandler
 
     steps:
       - name: Checkout code
