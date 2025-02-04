@@ -1,39 +1,45 @@
 import AWS from "aws-sdk";
 
 const lambda = new AWS.Lambda();
+const dynamoDB = new AWS.DynamoDB.DocumentClient();
+const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
 
 export const handler = async (event) => {
   console.log("🟢 WebSocket Message Event:", JSON.stringify(event, null, 2));
 
-  // 1️⃣ Extract connection ID safely
-  const connectionId = event.requestContext?.connectionId;
+  // 1️⃣ Extract sessionId, action, and message directly from `event`
+  const { sessionId, action, message } = event;
 
-  // 2️⃣ Ensure event.body exists before parsing
-  if (!event.body) {
-    console.error("❌ event.body is undefined, cannot parse JSON");
-    return { statusCode: 400, body: "Invalid request: Missing body" };
+  if (!sessionId || !message || !action) {
+    console.error("❌ Missing sessionId, message, or action");
+    return { statusCode: 400, body: "Invalid request: Missing sessionId, message, or action" };
   }
 
-  let body;
+  // 2️⃣ Retrieve `connectionId` from DynamoDB using `sessionId`
+  let connectionId;
   try {
-    body = JSON.parse(event.body);
+    const result = await dynamoDB
+      .get({
+        TableName: CONNECTIONS_TABLE,
+        Key: { sessionId },
+      })
+      .promise();
+
+    if (!result.Item) {
+      console.error("❌ No active connection found for sessionId:", sessionId);
+      return { statusCode: 404, body: "No active WebSocket connection found" };
+    }
+
+    connectionId = result.Item.connectionId;
+    console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);
   } catch (error) {
-    console.error("❌ JSON parsing error:", error);
-    return { statusCode: 400, body: "Invalid JSON format" };
+    console.error("❌ Error fetching connectionId from DynamoDB:", error);
+    return { statusCode: 500, body: "Failed to retrieve WebSocket connection" };
   }
 
-  // 3️⃣ Extract message & action
-  const { action, message } = body;
-
-  if (!message || !action || !connectionId) {
-    console.error("❌ Invalid message format or missing connectionId");
-    return { statusCode: 400, body: "Invalid message format or missing connectionId" };
-  }
-
-  // 4️⃣ Define routing logic
+  // 3️⃣ Define routing logic
   const lambdaFunctionMap = {
     openai: "openAIHandler",
-    other: "otherAIHandler", // Example: Future AI integration
   };
 
   const functionName = lambdaFunctionMap[action];
