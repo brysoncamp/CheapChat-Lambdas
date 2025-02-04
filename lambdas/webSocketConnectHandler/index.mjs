@@ -23,19 +23,20 @@ function getSigningKey(header, callback) {
 }
 
 export async function handler(event) {
-  console.log("WebSocket Connection Event:", event);
+  console.log("🟢 WebSocket Connection Event:", JSON.stringify(event, null, 2));
 
   const { connectionId } = event.requestContext;
   const params = event.queryStringParameters || {};
   const token = params.token;
+  const sessionId = params.sessionId; // ✅ Client must send a sessionId
 
-  if (!token) {
-    console.error("No token provided");
-    return { statusCode: 401, body: "Unauthorized: No token provided" };
+  if (!token || !sessionId) {
+    console.error("❌ Missing token or sessionId");
+    return { statusCode: 401, body: "Unauthorized: Missing token or sessionId" };
   }
 
   try {
-    // ✅ Verify Cognito Token using JWKS
+    // ✅ Verify Cognito Token
     const decodedToken = await new Promise((resolve, reject) => {
       jwt.verify(token, getSigningKey, { algorithms: ["RS256"] }, (err, decoded) => {
         if (err) reject(err);
@@ -43,22 +44,22 @@ export async function handler(event) {
       });
     });
 
-    console.log("Decoded Token:", decodedToken);
+    console.log("✅ Decoded Token:", decodedToken);
 
     const userId = decodedToken.sub;
     const ttl = Math.floor(Date.now() / 1000) + 3600; // 1 hour TTL
 
-    // ✅ Store Connection in DynamoDB
+    // ✅ Store Connection with sessionId in DynamoDB
     await dynamoDB.put({
       TableName: process.env.DYNAMO_DB_TABLE_NAME,
-      Item: { connectionId, userId, deleteAt: ttl }
+      Item: { sessionId, connectionId, userId, deleteAt: ttl },
     }).promise();
 
-    console.log(`Stored connection: ${connectionId} for user: ${userId}`);
+    console.log(`✅ Stored connection: ${connectionId} for user: ${userId} with sessionId: ${sessionId}`);
 
     return { statusCode: 200, body: "Connected" };
   } catch (error) {
-    console.error("Token validation failed:", error);
+    console.error("❌ Token validation failed:", error);
     return { statusCode: 401, body: "Unauthorized: Invalid token" };
   }
 }

@@ -16,9 +16,9 @@ const getOpenAIKey = async () => {
   console.log("🔄 Fetching OpenAI API Key from Secrets Manager...");
   try {
     const data = await secretsManager.getSecretValue({
-      SecretId: "OpenAISecrets"
+      SecretId: "OpenAISecrets",
     }).promise();
-    
+
     cachedApiKey = JSON.parse(data.SecretString).OPENAI_API_KEY; // 🔹 Store in cache
     return cachedApiKey;
   } catch (error) {
@@ -28,14 +28,10 @@ const getOpenAIKey = async () => {
 };
 
 export const handler = async (event) => {
-  console.log("OpenAI Handler Event:", JSON.stringify(event, null, 2));
+  console.log("🟢 OpenAI Handler Event:", JSON.stringify(event, null, 2));
 
-  // ✅ Get cached API key or fetch it if not cached
-  const apiKey = await getOpenAIKey();
-  const openai = new OpenAI({ apiKey });
-
-  // ✅ Extract connection ID & message
-  const { connectionId, message } = JSON.parse(event.body);
+  // ✅ Extract connection ID & message directly from event
+  const { connectionId, message } = event; // ✅ Fix: Use event directly
 
   if (!message || !connectionId) {
     console.error("❌ Invalid request: Missing message or connectionId");
@@ -44,6 +40,10 @@ export const handler = async (event) => {
 
   try {
     console.log(`🔹 Sending message to OpenAI: ${message}`);
+
+    // ✅ Get cached API key or fetch if not cached
+    const apiKey = await getOpenAIKey();
+    const openai = new OpenAI({ apiKey });
 
     // ✅ Call OpenAI API with streaming enabled
     const response = await openai.chat.completions.create({
