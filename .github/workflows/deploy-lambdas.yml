@@ -16,6 +16,8 @@ jobs:
           - cognitoUserSync
           - handleStripeWebhook
           - webSocketConnectHandler
+          - messageRouterHandler
+          - openAIHandler
 
     steps:
       - name: Checkout code
