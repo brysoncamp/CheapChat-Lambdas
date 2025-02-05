@@ -66,6 +66,11 @@ export const handler = async (event) => {
       }
     }
 
+    await apiGateway.postToConnection({
+      ConnectionId: connectionId,
+      Data: JSON.stringify({ done: true }),
+    }).promise();
+
     console.log("✅ Response sent successfully");
     return { statusCode: 200, body: "Response sent to client" };
   } catch (error) {
