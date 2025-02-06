@@ -7,15 +7,14 @@ const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
 export const handler = async (event) => {
   console.log("🟢 WebSocket Message Event:", JSON.stringify(event, null, 2));
 
-  // 1️⃣ Extract sessionId, action, and message directly from `event`
   const { sessionId, action, message } = event;
 
-  if (!sessionId || !message || !action) {
-    console.error("❌ Missing sessionId, message, or action");
-    return { statusCode: 400, body: "Invalid request: Missing sessionId, message, or action" };
+  if (!sessionId || !action) {
+    console.error("❌ Missing sessionId or action");
+    return { statusCode: 400, body: "Invalid request: Missing sessionId or action" };
   }
 
-  // 2️⃣ Retrieve `connectionId` from DynamoDB using `sessionId`
+  // ✅ 1. Get WebSocket `connectionId` from sessionId
   let connectionId;
   try {
     const result = await dynamoDB
@@ -37,11 +36,22 @@ export const handler = async (event) => {
     return { statusCode: 500, body: "Failed to retrieve WebSocket connection" };
   }
 
-  // 3️⃣ Define routing logic
-  const lambdaFunctionMap = {
-    openai: "openAIHandler",
-  };
+  // ✅ 2. Handle CANCEL request before invoking OpenAI Lambda
+  if (action === "cancel") {
+    console.log(`🚫 Cancel request received for session: ${sessionId}`);
 
+    await dynamoDB.update({
+      TableName: CONNECTIONS_TABLE,
+      Key: { sessionId },
+      UpdateExpression: "SET canceled = :canceled",
+      ExpressionAttributeValues: { ":canceled": true },
+    }).promise();
+
+    return { statusCode: 200, body: "Processing canceled" };
+  }
+
+  // ✅ 3. Route messages to OpenAI Lambda
+  const lambdaFunctionMap = { openai: "openAIHandler" };
   const functionName = lambdaFunctionMap[action];
 
   if (!functionName) {
@@ -51,7 +61,7 @@ export const handler = async (event) => {
 
   try {
     console.log(`🔹 Forwarding message to ${functionName}...`);
-    const payload = { connectionId, message };
+    const payload = { connectionId, message, sessionId };
 
     await lambda.invoke({
       FunctionName: functionName,
@@ -59,8 +69,7 @@ export const handler = async (event) => {
       Payload: JSON.stringify(payload),
     }).promise();
 
-    console.log(`✅ Message forwarded to ${functionName} with connectionId: ${connectionId}`);
-
+    console.log(`✅ Message forwarded to ${functionName}`);
     return { statusCode: 200, body: `Message forwarded to ${functionName}` };
   } catch (error) {
     console.error("❌ Error routing message:", error);

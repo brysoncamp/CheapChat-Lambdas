@@ -6,9 +6,8 @@ let cachedApiKey = null;
 const apiGateway = new AWS.ApiGatewayManagementApi({
   endpoint: process.env.WEBSOCKET_ENDPOINT,
 });
-
-// 🔹 Active connections map for tracking running requests
-const activeConnections = new Map();
+const dynamoDB = new AWS.DynamoDB.DocumentClient();
+const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
 
 // ✅ Fetch OpenAI API Key (cached)
 const getOpenAIKey = async () => {
@@ -26,22 +25,9 @@ const getOpenAIKey = async () => {
 export const handler = async (event) => {
   console.log("🟢 OpenAI Handler Event:", JSON.stringify(event, null, 2));
 
-  const { connectionId, message, action } = event; // ✅ Extract action (could be 'cancel')
-  if (!connectionId) {
-    return { statusCode: 400, body: "Invalid request: Missing connectionId" };
-  }
-
-  // ✅ Handle cancellation request
-  if (action === "cancel") {
-    if (activeConnections.has(connectionId)) {
-      activeConnections.set(connectionId, { canceled: true });
-      console.log(`🔴 Canceling active request for connection ${connectionId}`);
-    }
-    return { statusCode: 200, body: "Processing canceled" };
-  }
-
-  if (!message) {
-    return { statusCode: 400, body: "Invalid request: Missing message" };
+  const { connectionId, sessionId, message } = event;
+  if (!connectionId || !sessionId) {
+    return { statusCode: 400, body: "Invalid request: Missing connectionId or sessionId" };
   }
 
   try {
@@ -49,44 +35,49 @@ export const handler = async (event) => {
     const apiKey = await getOpenAIKey();
     const openai = new OpenAI({ apiKey });
 
-    // ✅ Track connection to allow cancellation
-    activeConnections.set(connectionId, { canceled: false });
+    let isCanceled = false; // ✅ Store cancellation status in memory
 
-    // ✅ Timeout handling (trigger timeout warning if exceeding 25s)
-    const timeoutPromise = new Promise((resolve) =>
-      setTimeout(() => resolve("timeout"), 25000)
-    );
+    // ✅ Separate Cancellation Check Loop (runs every second)
+    const checkCancellation = async () => {
+      while (!isCanceled) {
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // ✅ Check every 1s
+
+        const checkResult = await dynamoDB.get({
+          TableName: CONNECTIONS_TABLE,
+          Key: { sessionId },
+        }).promise();
+
+        if (checkResult.Item?.canceled) {
+          isCanceled = true;
+        }
+      }
+    };
+
+    // ✅ Start cancellation check in parallel
+    checkCancellation();
 
     // ✅ OpenAI Streaming Request
-    const responsePromise = openai.chat.completions.create({
+    const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "user", content: message }],
       stream: true,
     });
 
-    const response = await Promise.race([responsePromise, timeoutPromise]);
-
-    if (response === "timeout") {
-      console.log(`⚠️ Timeout reached for connection ${connectionId}`);
-      await apiGateway.postToConnection({
-        ConnectionId: connectionId,
-        Data: JSON.stringify({ timeout: true }),
-      }).promise();
-      activeConnections.delete(connectionId);
-      return { statusCode: 408, body: "Timeout reached" };
-    }
-
     console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${connectionId}`);
 
     // ✅ Process OpenAI Streaming
     for await (const chunk of response) {
+      if (isCanceled) {
+        console.log(`🛑 Canceled streaming for session ${sessionId}`);
+        await apiGateway.postToConnection({
+          ConnectionId: connectionId,
+          Data: JSON.stringify({ canceled: true }),
+        }).promise();
+        break;
+      }
+
       const text = chunk.choices?.[0]?.delta?.content || "";
       if (text) {
-        // ✅ Stop sending messages if the user cancels
-        if (activeConnections.get(connectionId)?.canceled) {
-          console.log(`🛑 Stopped streaming for connection ${connectionId}`);
-          break;
-        }
         await apiGateway.postToConnection({
           ConnectionId: connectionId,
           Data: JSON.stringify({ text }),
@@ -95,15 +86,12 @@ export const handler = async (event) => {
     }
 
     // ✅ If request wasn't canceled, send "done"
-    if (!activeConnections.get(connectionId)?.canceled) {
+    if (!isCanceled) {
       await apiGateway.postToConnection({
         ConnectionId: connectionId,
         Data: JSON.stringify({ done: true }),
       }).promise();
     }
-
-    // ✅ Cleanup connection tracking
-    activeConnections.delete(connectionId);
 
     console.log("✅ Response sent successfully");
     return { statusCode: 200, body: "Response sent to client" };
