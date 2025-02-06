@@ -93,6 +93,16 @@ export const handler = async (event) => {
       // If either the timeout or a cancel is triggered, break out.
       if (timeoutTriggered || isCanceled) {
         console.log(`🛑 Stopping streaming for session ${sessionId}`);
+
+        if (isCanceled) {
+          await apiGateway
+            .postToConnection({
+              ConnectionId: connectionId,
+              Data: JSON.stringify({ canceled: true }),
+            })
+            .promise();
+        }
+
         break;
       }
 
