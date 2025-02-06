@@ -13,7 +13,9 @@ const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
 const getOpenAIKey = async () => {
   if (cachedApiKey) return cachedApiKey;
   try {
-    const data = await secretsManager.getSecretValue({ SecretId: "OpenAISecrets" }).promise();
+    const data = await secretsManager
+      .getSecretValue({ SecretId: "OpenAISecrets" })
+      .promise();
     cachedApiKey = JSON.parse(data.SecretString).OPENAI_API_KEY;
     return cachedApiKey;
   } catch (error) {
@@ -27,7 +29,10 @@ export const handler = async (event) => {
 
   const { connectionId, sessionId, message } = event;
   if (!connectionId || !sessionId) {
-    return { statusCode: 400, body: "Invalid request: Missing connectionId or sessionId" };
+    return {
+      statusCode: 400,
+      body: "Invalid request: Missing connectionId or sessionId",
+    };
   }
 
   try {
@@ -36,37 +41,36 @@ export const handler = async (event) => {
     const openai = new OpenAI({ apiKey });
 
     let isCanceled = false;
-    const abortController = new AbortController(); // ✅ For aborting request
-    const timeoutMs = 25000; // 25 seconds
     let timeoutTriggered = false;
+    const timeoutMs = 25000; // 25 seconds
 
-    // ✅ Start a separate timeout that cancels OpenAI if it takes too long
+    // ✅ Start a separate timeout that marks the request as timed out
     const timeout = setTimeout(async () => {
       console.log(`⚠️ Timeout reached for connection ${connectionId}`);
       timeoutTriggered = true;
 
-      // ❌ Remove forced stop request (max_tokens:1) since it's unnecessary
-      abortController.abort(); // ❌ Abort our side
-
-      await apiGateway.postToConnection({
-        ConnectionId: connectionId,
-        Data: JSON.stringify({ timeout: true }),
-      }).promise();
+      await apiGateway
+        .postToConnection({
+          ConnectionId: connectionId,
+          Data: JSON.stringify({ timeout: true }),
+        })
+        .promise();
     }, timeoutMs);
 
     // ✅ Separate Cancellation Check Loop (runs every second)
     const checkCancellation = async () => {
       while (!isCanceled && !timeoutTriggered) {
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // ✅ Check every 1s
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // Check every 1s
 
-        const checkResult = await dynamoDB.get({
-          TableName: CONNECTIONS_TABLE,
-          Key: { sessionId },
-        }).promise();
+        const checkResult = await dynamoDB
+          .get({
+            TableName: CONNECTIONS_TABLE,
+            Key: { sessionId },
+          })
+          .promise();
 
         if (checkResult.Item?.canceled) {
           isCanceled = true;
-          abortController.abort(); // ✅ Cancel OpenAI request
         }
       }
     };
@@ -74,18 +78,19 @@ export const handler = async (event) => {
     // ✅ Start cancellation check in parallel
     checkCancellation();
 
-    // ✅ OpenAI Streaming Request (with AbortController)
+    // ✅ OpenAI Streaming Request
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "user", content: message }],
       stream: true,
-      signal: abortController.signal, // ⛔ Allow cancellation
+      // ⚠ Removed `signal` to avoid "Unrecognized request argument supplied: signal" error
     });
 
     console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${connectionId}`);
 
     // ✅ Process OpenAI Streaming
     for await (const chunk of response) {
+      // If either the timeout or a cancel is triggered, break out.
       if (timeoutTriggered || isCanceled) {
         console.log(`🛑 Stopping streaming for session ${sessionId}`);
         break;
@@ -93,10 +98,12 @@ export const handler = async (event) => {
 
       const text = chunk.choices?.[0]?.delta?.content || "";
       if (text) {
-        await apiGateway.postToConnection({
-          ConnectionId: connectionId,
-          Data: JSON.stringify({ text }),
-        }).promise();
+        await apiGateway
+          .postToConnection({
+            ConnectionId: connectionId,
+            Data: JSON.stringify({ text }),
+          })
+          .promise();
       }
     }
 
@@ -105,22 +112,22 @@ export const handler = async (event) => {
 
     // ✅ If request wasn't canceled, send "done"
     if (!timeoutTriggered && !isCanceled) {
-      await apiGateway.postToConnection({
-        ConnectionId: connectionId,
-        Data: JSON.stringify({ done: true }),
-      }).promise();
+      await apiGateway
+        .postToConnection({
+          ConnectionId: connectionId,
+          Data: JSON.stringify({ done: true }),
+        })
+        .promise();
     }
 
     console.log("✅ Response sent successfully");
     return { statusCode: 200, body: "Response sent to client" };
-
   } catch (error) {
-    if (error.name === "AbortError") {
-      console.warn(`⏳ OpenAI request was aborted for connection ${connectionId}`);
-      return { statusCode: 408, body: "Request aborted due to timeout or cancellation" };
-    }
-
     console.error("❌ OpenAI API Error:", error);
-    return { statusCode: 500, body: "Error contacting OpenAI" };
+    // We can no longer rely on AbortError detection
+    return {
+      statusCode: 500,
+      body: "Error contacting OpenAI or reading the stream",
+    };
   }
 };
