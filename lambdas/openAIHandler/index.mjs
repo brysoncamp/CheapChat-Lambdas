@@ -48,13 +48,6 @@ export const handler = async (event) => {
     const timeout = setTimeout(async () => {
       console.log(`⚠️ Timeout reached for connection ${connectionId}`);
       timeoutTriggered = true;
-
-      await apiGateway
-        .postToConnection({
-          ConnectionId: connectionId,
-          Data: JSON.stringify({ timeout: true }),
-        })
-        .promise();
     }, timeoutMs);
 
     // ✅ Separate Cancellation Check Loop (runs every second)
@@ -107,6 +100,15 @@ export const handler = async (event) => {
             Key: { sessionId },
             UpdateExpression: "REMOVE canceled", // Removes the canceled flag
           }).promise();
+        }
+
+        if (timeoutTriggered) {
+          await apiGateway
+            .postToConnection({
+              ConnectionId: connectionId,
+              Data: JSON.stringify({ timeout: true }),
+            })
+            .promise();
         }
 
         break;
