@@ -101,6 +101,12 @@ export const handler = async (event) => {
               Data: JSON.stringify({ canceled: true }),
             })
             .promise();
+
+          await dynamoDB.update({
+            TableName: CONNECTIONS_TABLE,
+            Key: { sessionId },
+            UpdateExpression: "REMOVE canceled", // Removes the canceled flag
+          }).promise();
         }
 
         break;
