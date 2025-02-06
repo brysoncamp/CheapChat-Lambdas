@@ -35,11 +35,28 @@ export const handler = async (event) => {
     const apiKey = await getOpenAIKey();
     const openai = new OpenAI({ apiKey });
 
-    let isCanceled = false; // ✅ Store cancellation status in memory
+    let isCanceled = false;
+    const abortController = new AbortController(); // ✅ For aborting request
+    const timeoutMs = 25000; // 25 seconds
+    let timeoutTriggered = false;
+
+    // ✅ Start a separate timeout that cancels OpenAI if it takes too long
+    const timeout = setTimeout(async () => {
+      console.log(`⚠️ Timeout reached for connection ${connectionId}`);
+      timeoutTriggered = true;
+
+      // ❌ Remove forced stop request (max_tokens:1) since it's unnecessary
+      abortController.abort(); // ❌ Abort our side
+
+      await apiGateway.postToConnection({
+        ConnectionId: connectionId,
+        Data: JSON.stringify({ timeout: true }),
+      }).promise();
+    }, timeoutMs);
 
     // ✅ Separate Cancellation Check Loop (runs every second)
     const checkCancellation = async () => {
-      while (!isCanceled) {
+      while (!isCanceled && !timeoutTriggered) {
         await new Promise((resolve) => setTimeout(resolve, 1000)); // ✅ Check every 1s
 
         const checkResult = await dynamoDB.get({
@@ -49,6 +66,7 @@ export const handler = async (event) => {
 
         if (checkResult.Item?.canceled) {
           isCanceled = true;
+          abortController.abort(); // ✅ Cancel OpenAI request
         }
       }
     };
@@ -56,23 +74,20 @@ export const handler = async (event) => {
     // ✅ Start cancellation check in parallel
     checkCancellation();
 
-    // ✅ OpenAI Streaming Request
+    // ✅ OpenAI Streaming Request (with AbortController)
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "user", content: message }],
       stream: true,
+      signal: abortController.signal, // ⛔ Allow cancellation
     });
 
     console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${connectionId}`);
 
     // ✅ Process OpenAI Streaming
     for await (const chunk of response) {
-      if (isCanceled) {
-        console.log(`🛑 Canceled streaming for session ${sessionId}`);
-        await apiGateway.postToConnection({
-          ConnectionId: connectionId,
-          Data: JSON.stringify({ canceled: true }),
-        }).promise();
+      if (timeoutTriggered || isCanceled) {
+        console.log(`🛑 Stopping streaming for session ${sessionId}`);
         break;
       }
 
@@ -85,8 +100,11 @@ export const handler = async (event) => {
       }
     }
 
+    // ✅ Clear timeout if OpenAI finished before 25s
+    clearTimeout(timeout);
+
     // ✅ If request wasn't canceled, send "done"
-    if (!isCanceled) {
+    if (!timeoutTriggered && !isCanceled) {
       await apiGateway.postToConnection({
         ConnectionId: connectionId,
         Data: JSON.stringify({ done: true }),
@@ -97,6 +115,11 @@ export const handler = async (event) => {
     return { statusCode: 200, body: "Response sent to client" };
 
   } catch (error) {
+    if (error.name === "AbortError") {
+      console.warn(`⏳ OpenAI request was aborted for connection ${connectionId}`);
+      return { statusCode: 408, body: "Request aborted due to timeout or cancellation" };
+    }
+
     console.error("❌ OpenAI API Error:", error);
     return { statusCode: 500, body: "Error contacting OpenAI" };
   }
