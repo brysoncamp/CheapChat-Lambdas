@@ -84,13 +84,15 @@ export const handler = async (event) => {
     // ✅ Start cancellation check in parallel
     checkCancellation();
 
+    const messages = [{ role: "user", content: message }];
+
     // ✅ Count input tokens BEFORE sending to OpenAI
-    const promptTokensEstimate = countTokens(message);
+    const promptTokensEstimate = countTokens(messages);
 
     // ✅ OpenAI Streaming Request
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
-      messages: [{ role: "user", content: message }],
+      messages: [{ role: "user", content: messages }],
       stream: true,
       stream_options: { include_usage: true },
     });
