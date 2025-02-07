@@ -30,12 +30,20 @@ const getOpenAIKey = async () => {
 
 
 
-const countTokens = (text, model = "gpt-4o") => {
+const countTokens = (messages, model = "gpt-4o") => {
   const encoder = encoding_for_model(model);
-  const tokenCount = encoder.encode(text).length;
+  let tokenCount = 0;
+
+  for (const message of messages) {
+    tokenCount += encoder.encode(message.role || "").length; // Ensure role is a string
+    tokenCount += encoder.encode(message.content || "").length; // Ensure content is a string
+    tokenCount += 2; // ✅ OpenAI adds 2 extra tokens per message (structural overhead)
+  }
+
   encoder.free(); // Free memory after use
   return tokenCount;
 };
+
 
 export const handler = async (event) => {
   console.log("🟢 OpenAI Handler Event:", JSON.stringify(event, null, 2));
