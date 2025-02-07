@@ -1,8 +1,11 @@
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
-import { DynamoDBClient, GetCommand, UpdateCommand } from "@aws-sdk/client-dynamodb";
+import DynamoDBPkg from "@aws-sdk/client-dynamodb"; // ✅ Fixed import
 import OpenAI from "openai";
 import { encoding_for_model } from "tiktoken";
+
+// ✅ Destructure AWS DynamoDB Client (Fix for CommonJS Module Issue)
+const { DynamoDBClient, GetCommand, UpdateCommand } = DynamoDBPkg;
 
 // ✅ Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
