@@ -1,11 +1,8 @@
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
-import DynamoDBPkg from "@aws-sdk/client-dynamodb"; // ✅ Fixed import
+import { DynamoDBClient, GetCommand, UpdateCommand } from "@aws-sdk/client-dynamodb";
 import OpenAI from "openai";
 import { encoding_for_model } from "tiktoken";
-
-// ✅ Destructure AWS DynamoDB Client (Fix for CommonJS Module Issue)
-const { DynamoDBClient, GetCommand, UpdateCommand } = DynamoDBPkg;
 
 // ✅ Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
@@ -15,10 +12,8 @@ const apiGateway = new ApiGatewayManagementApiClient({
 const dynamoDB = new DynamoDBClient({});
 const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
 
-// ✅ Cached OpenAI API Key
-let cachedApiKey = null;
-
 // ✅ Fetch OpenAI API Key (cached)
+let cachedApiKey = null;
 const getOpenAIKey = async () => {
   if (cachedApiKey) return cachedApiKey;
   try {
@@ -35,7 +30,7 @@ const getOpenAIKey = async () => {
 const countTokens = (text, model = "gpt-4o") => {
   const encoder = encoding_for_model(model);
   const tokenCount = encoder.encode(text).length;
-  encoder.free(); // Free memory after use
+  encoder.free();
   return tokenCount;
 };
 
@@ -57,7 +52,7 @@ export const handler = async (event) => {
 
     let isCanceled = false;
     let timeoutTriggered = false;
-    const timeoutMs = 60000; // Increased timeout to 60 seconds
+    const timeoutMs = 60000;
 
     // ✅ Start a separate timeout that marks the request as timed out
     const timeout = setTimeout(async () => {
@@ -65,10 +60,11 @@ export const handler = async (event) => {
       timeoutTriggered = true;
     }, timeoutMs);
 
-    // ✅ Separate Cancellation Check Loop (runs every second)
+    // ✅ Separate Cancellation Check Loop
     const checkCancellation = async () => {
       while (!isCanceled && !timeoutTriggered) {
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // Check every 1s
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
         const checkResult = await dynamoDB.send(new GetCommand({
           TableName: CONNECTIONS_TABLE,
           Key: { sessionId },
@@ -110,7 +106,6 @@ export const handler = async (event) => {
         receivedUsage = true;
       }
 
-      // If either the timeout or a cancel is triggered, break out.
       if (timeoutTriggered || isCanceled) {
         console.log(`🛑 Stopping streaming for session ${sessionId}`);
 
@@ -123,7 +118,7 @@ export const handler = async (event) => {
           await dynamoDB.send(new UpdateCommand({
             TableName: CONNECTIONS_TABLE,
             Key: { sessionId },
-            UpdateExpression: "REMOVE canceled", // Removes the canceled flag
+            UpdateExpression: "REMOVE canceled",
           }));
         }
 
