@@ -29,20 +29,19 @@ const getOpenAIKey = async () => {
 };
 
 
-/*
-const countTokens = (messages, model = "gpt-4o") => {
+const countTokensForMessages = (messages, model = "gpt-4o") => {
   const encoder = encoding_for_model(model);
   let tokenCount = 0;
 
   for (const message of messages) {
-    tokenCount += encoder.encode(message.role || "").length; // Ensure role is a string
-    tokenCount += encoder.encode(message.content || "").length; // Ensure content is a string
-    tokenCount += 2; // ✅ OpenAI adds 2 extra tokens per message (structural overhead)
+    tokenCount += encoder.encode(message.role).length; // ✅ Role counts as tokens
+    tokenCount += encoder.encode(message.content).length; // ✅ Content tokens
+    tokenCount += 2; // ✅ OpenAI adds 2 extra tokens per message
   }
 
   encoder.free(); // Free memory after use
   return tokenCount;
-};*/
+};
 
 const countTokens = (text, model = "gpt-4o") => {
   const encoder = encoding_for_model(model);
@@ -50,6 +49,8 @@ const countTokens = (text, model = "gpt-4o") => {
   encoder.free(); // Free memory after use
   return tokenCount;
 };
+
+
 
 
 export const handler = async (event) => {
@@ -101,10 +102,8 @@ export const handler = async (event) => {
 
     const messages = [{ role: "user", content: message }];
 
-    const messagesString = messages.map(m => `${m.role}: ${m.content}`).join("\n");
-
     // ✅ Count input tokens BEFORE sending to OpenAI
-    const promptTokensEstimate = countTokens(messagesString); //convert to string
+    const promptTokensEstimate = countTokensForMessages(messages); //convert to string
 
     // ✅ OpenAI Streaming Request
     const response = await openai.chat.completions.create({
