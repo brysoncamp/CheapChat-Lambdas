@@ -1,5 +1,9 @@
+
+
 import AWS from "aws-sdk";
 import OpenAI from "openai";
+
+import { encoding_for_model } from "tiktoken";
 
 const secretsManager = new AWS.SecretsManager();
 let cachedApiKey = null;
@@ -22,6 +26,15 @@ const getOpenAIKey = async () => {
     console.error("❌ Error retrieving API Key:", error);
     throw new Error("Failed to retrieve OpenAI API Key");
   }
+};
+
+
+
+const countTokens = (text, model = "gpt-4o") => {
+  const encoder = encoding_for_model(model);
+  const tokenCount = encoder.encode(text).length;
+  encoder.free(); // Free memory after use
+  return tokenCount;
 };
 
 export const handler = async (event) => {
@@ -71,6 +84,9 @@ export const handler = async (event) => {
     // ✅ Start cancellation check in parallel
     checkCancellation();
 
+    // ✅ Count input tokens BEFORE sending to OpenAI
+    const promptTokensEstimate = countTokens(message);
+
     // ✅ OpenAI Streaming Request
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -85,6 +101,7 @@ export const handler = async (event) => {
     let completionTokens = 0;
     let totalTokens = 0;
     let receivedUsage = false;
+    let fullResponse = "";
 
     // ✅ Process OpenAI Streaming
     for await (const chunk of response) {
@@ -123,10 +140,11 @@ export const handler = async (event) => {
             .promise();
         }
 
+        /*
         if (!receivedUsage) {
           console.log("⚠️ Waiting for OpenAI to send token usage before closing...");
           continue; // ✅ Keep listening for final `chunk.usage`
-        }
+        }*/
 
         break;
       }
@@ -139,13 +157,17 @@ export const handler = async (event) => {
             Data: JSON.stringify({ text }),
           })
           .promise();
+        fullResponse += text;
       }
     }
 
     // ✅ Clear timeout if OpenAI finished before 25s
     clearTimeout(timeout);
 
+    const completionTokensEstimate = countTokens(fullResponse);
+
     console.log(`🟢 Token Usage: Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`);
+    console.log(`🟢 Token Usage: Prompt Estimate = ${promptTokensEstimate}, Completion Estimate = ${completionTokensEstimate}`);
 
     // ✅ If request wasn't canceled, send "done"
     if (!timeoutTriggered && !isCanceled) {

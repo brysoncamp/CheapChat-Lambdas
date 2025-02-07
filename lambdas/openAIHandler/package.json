@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "aws-sdk": "^2.1692.0",
-    "openai": "^4.82.0"
+    "openai": "^4.82.0",
+    "tiktoken": "^1.0.20"
   }
 }
