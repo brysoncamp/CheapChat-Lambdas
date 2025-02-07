@@ -86,7 +86,6 @@ export const handler = async (event) => {
 
     // ✅ Prepare messages for token estimation
     const messages = [{ role: "user", content: message }];
-    const promptTokensEstimate = countTokens(JSON.stringify(messages));
 
     // ✅ OpenAI Streaming Request
     const response = await openai.chat.completions.create({
@@ -152,11 +151,6 @@ export const handler = async (event) => {
     // ✅ Clear timeout if OpenAI finished before 60s
     clearTimeout(timeout);
 
-    const completionTokensEstimate = countTokens(fullResponse);
-
-    console.log(`🟢 Token Usage: Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`);
-    console.log(`🟢 Token Usage: Prompt Estimate = ${promptTokensEstimate}, Completion Estimate = ${completionTokensEstimate}`);
-
     // ✅ If request wasn't canceled, send "done"
     if (!timeoutTriggered && !isCanceled) {
       await apiGateway.send(new PostToConnectionCommand({
@@ -164,6 +158,13 @@ export const handler = async (event) => {
         Data: JSON.stringify({ done: true }),
       }));
     }
+
+    const promptTokensEstimate = countTokens(JSON.stringify(messages));
+    const completionTokensEstimate = countTokens(fullResponse);
+
+    console.log(`🟢 Token Usage: Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`);
+    console.log(`🟢 Token Usage: Prompt Estimate = ${promptTokensEstimate}, Completion Estimate = ${completionTokensEstimate}`);
+
 
     console.log("✅ Response sent successfully");
     return { statusCode: 200, body: "Response sent to client" };
