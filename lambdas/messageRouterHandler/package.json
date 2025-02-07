@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "aws-sdk": "^2.1692.0"
+    "@aws-sdk/client-dynamodb": "^3.743.0",
+    "@aws-sdk/client-lambda": "^3.743.0"
   }
 }

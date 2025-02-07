@@ -1,7 +1,10 @@
-import AWS from "aws-sdk";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
-const lambda = new AWS.Lambda();
-const dynamoDB = new AWS.DynamoDB.DocumentClient();
+// ✅ Initialize AWS Clients
+const lambda = new LambdaClient({});
+const dynamoDB = new DynamoDBClient({});
 const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
 
 export const handler = async (event) => {
@@ -17,12 +20,12 @@ export const handler = async (event) => {
   // ✅ 1. Get WebSocket `connectionId` from sessionId
   let connectionId;
   try {
-    const result = await dynamoDB
-      .get({
+    const result = await dynamoDB.send(
+      new GetCommand({
         TableName: CONNECTIONS_TABLE,
         Key: { sessionId },
       })
-      .promise();
+    );
 
     if (!result.Item) {
       console.error("❌ No active connection found for sessionId:", sessionId);
@@ -40,12 +43,14 @@ export const handler = async (event) => {
   if (action === "cancel") {
     console.log(`🚫 Cancel request received for session: ${sessionId}`);
 
-    await dynamoDB.update({
-      TableName: CONNECTIONS_TABLE,
-      Key: { sessionId },
-      UpdateExpression: "SET canceled = :canceled",
-      ExpressionAttributeValues: { ":canceled": true },
-    }).promise();
+    await dynamoDB.send(
+      new UpdateCommand({
+        TableName: CONNECTIONS_TABLE,
+        Key: { sessionId },
+        UpdateExpression: "SET canceled = :canceled",
+        ExpressionAttributeValues: { ":canceled": true },
+      })
+    );
 
     return { statusCode: 200, body: "Processing canceled" };
   }
@@ -63,11 +68,13 @@ export const handler = async (event) => {
     console.log(`🔹 Forwarding message to ${functionName}...`);
     const payload = { connectionId, message, sessionId };
 
-    await lambda.invoke({
-      FunctionName: functionName,
-      InvocationType: "Event",
-      Payload: JSON.stringify(payload),
-    }).promise();
+    await lambda.send(
+      new InvokeCommand({
+        FunctionName: functionName,
+        InvocationType: "Event",
+        Payload: Buffer.from(JSON.stringify(payload)),
+      })
+    );
 
     console.log(`✅ Message forwarded to ${functionName}`);
     return { statusCode: 200, body: `Message forwarded to ${functionName}` };
