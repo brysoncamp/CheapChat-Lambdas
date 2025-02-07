@@ -32,13 +32,13 @@ const countTokens = (text, model = "gpt-4o") => {
   const encoder = encoding_for_model(model);
   const tokenCount = encoder.encode(text).length;
   encoder.free();
-  return tokenCount;
+  return tokenCount + 1;
 };
 
 const countTokensForMessages = (messages, model = "gpt-4o") => {
-  const encoder = tiktoken.encoding_for_model(model);
+  const encoder = encoding_for_model(model);
 
-  let tokenCount = 3; // Every chat starts with 3 tokens (OpenAI rule)
+  let tokenCount = 0; // Every chat starts with 3 tokens (OpenAI rule)
 
   messages.forEach(({ role, content }) => {
     tokenCount += 4; // OpenAI assigns 4 extra tokens per message
@@ -175,7 +175,7 @@ export const handler = async (event) => {
     }
 
     const promptTokensEstimate = countTokensForMessages(messages);
-    const completionTokensEstimate = countTokens(fullResponse) + 1;
+    const completionTokensEstimate = countTokens(fullResponse);
 
     console.log(`🟢 Token Usage: Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`);
     console.log(`🟢 Token Usage: Prompt Estimate = ${promptTokensEstimate}, Completion Estimate = ${completionTokensEstimate}`);
