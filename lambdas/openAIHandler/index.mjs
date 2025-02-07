@@ -30,18 +30,18 @@ const getOpenAIKey = async () => {
 // ✅ Function to count tokens using OpenAI's official tokenizer
 const countTokens = (text, model = "gpt-4o") => {
   const encoder = encoding_for_model(model);
-  const tokenCount = encoder.encode(text).length;
+  const tokenCount = encoder.encode(text).length + 1;
   encoder.free();
-  return tokenCount + 1;
+  return tokenCount;
 };
 
 const countTokensForMessages = (messages, model = "gpt-4o") => {
   const encoder = encoding_for_model(model);
 
-  let tokenCount = 0; // Every chat starts with 3 tokens (OpenAI rule)
+  let tokenCount = 2;
 
   messages.forEach(({ role, content }) => {
-    tokenCount += 4; // OpenAI assigns 4 extra tokens per message
+    tokenCount += 4;
     tokenCount += encoder.encode(role).length;
     tokenCount += encoder.encode(content).length;
   });
