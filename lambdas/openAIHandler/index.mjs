@@ -76,13 +76,25 @@ export const handler = async (event) => {
       model: "gpt-4o",
       messages: [{ role: "user", content: message }],
       stream: true,
-      // ⚠ Removed `signal` to avoid "Unrecognized request argument supplied: signal" error
+      stream_options: { include_usage: true },
     });
 
     console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${connectionId}`);
 
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let totalTokens = 0;
+    let receivedUsage = false;
+
     // ✅ Process OpenAI Streaming
     for await (const chunk of response) {
+      if (chunk.usage) {
+        promptTokens = chunk.usage.prompt_tokens;
+        completionTokens = chunk.usage.completion_tokens;
+        totalTokens = chunk.usage.total_tokens;
+        receivedUsage = true;
+      }
+
       // If either the timeout or a cancel is triggered, break out.
       if (timeoutTriggered || isCanceled) {
         console.log(`🛑 Stopping streaming for session ${sessionId}`);
@@ -111,6 +123,11 @@ export const handler = async (event) => {
             .promise();
         }
 
+        if (!receivedUsage) {
+          console.log("⚠️ Waiting for OpenAI to send token usage before closing...");
+          continue; // ✅ Keep listening for final `chunk.usage`
+        }
+
         break;
       }
 
@@ -127,6 +144,8 @@ export const handler = async (event) => {
 
     // ✅ Clear timeout if OpenAI finished before 25s
     clearTimeout(timeout);
+
+    console.log(`🟢 Token Usage: Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`);
 
     // ✅ If request wasn't canceled, send "done"
     if (!timeoutTriggered && !isCanceled) {
