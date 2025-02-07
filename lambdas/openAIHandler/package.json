@@ -1,7 +1,10 @@
 {
   "dependencies": {
-    "aws-sdk": "^2.1692.0",
-    "openai": "^4.82.0",
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.743.0",
+    "@aws-sdk/client-dynamodb": "^3.743.0",
+    "@aws-sdk/client-secrets-manager": "^3.743.0",
+    "@aws-sdk/lib-dynamodb": "^3.743.0",
+    "openai": "^4.83.0",
     "tiktoken": "^1.0.20"
   }
 }

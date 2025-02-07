@@ -1,6 +1,7 @@
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
-import { DynamoDBClient, GetCommand, UpdateCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb"; // ✅ Only the client from this package
+import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb"; // ✅ Get & Update Command from lib-dynamodb
 import OpenAI from "openai";
 import { encoding_for_model } from "tiktoken";
 
@@ -65,12 +66,17 @@ export const handler = async (event) => {
       while (!isCanceled && !timeoutTriggered) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        const checkResult = await dynamoDB.send(new GetCommand({
-          TableName: CONNECTIONS_TABLE,
-          Key: { sessionId },
-        }));
-        if (checkResult.Item?.canceled) {
-          isCanceled = true;
+        try {
+          const checkResult = await dynamoDB.send(new GetCommand({
+            TableName: CONNECTIONS_TABLE,
+            Key: { sessionId },
+          }));
+
+          if (checkResult.Item?.canceled) {
+            isCanceled = true;
+          }
+        } catch (err) {
+          console.error(`❌ Error checking session cancellation: ${err.message}`);
         }
       }
     };
@@ -78,13 +84,14 @@ export const handler = async (event) => {
     // ✅ Start cancellation check in parallel
     checkCancellation();
 
-    // ✅ Count input tokens BEFORE sending to OpenAI
-    const promptTokensEstimate = countTokens(message);
+    // ✅ Prepare messages for token estimation
+    const messages = [{ role: "user", content: message }];
+    const promptTokensEstimate = countTokens(JSON.stringify(messages));
 
     // ✅ OpenAI Streaming Request
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
-      messages: [{ role: "user", content: message }],
+      messages: messages,
       stream: true,
       stream_options: { include_usage: true },
     });
