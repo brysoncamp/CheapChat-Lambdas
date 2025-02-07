@@ -29,7 +29,7 @@ const getOpenAIKey = async () => {
 };
 
 
-
+/*
 const countTokens = (messages, model = "gpt-4o") => {
   const encoder = encoding_for_model(model);
   let tokenCount = 0;
@@ -40,6 +40,13 @@ const countTokens = (messages, model = "gpt-4o") => {
     tokenCount += 2; // ✅ OpenAI adds 2 extra tokens per message (structural overhead)
   }
 
+  encoder.free(); // Free memory after use
+  return tokenCount;
+};*/
+
+const countTokens = (text, model = "gpt-4o") => {
+  const encoder = encoding_for_model(model);
+  const tokenCount = encoder.encode(text).length;
   encoder.free(); // Free memory after use
   return tokenCount;
 };
@@ -94,8 +101,10 @@ export const handler = async (event) => {
 
     const messages = [{ role: "user", content: message }];
 
+    const messagesString = messages.map(m => `${m.role}: ${m.content}`).join("\n");
+
     // ✅ Count input tokens BEFORE sending to OpenAI
-    const promptTokensEstimate = countTokens(messages);
+    const promptTokensEstimate = countTokens(messagesString); //convert to string
 
     // ✅ OpenAI Streaming Request
     const response = await openai.chat.completions.create({
