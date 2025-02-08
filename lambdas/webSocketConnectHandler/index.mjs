@@ -53,7 +53,7 @@ export async function handler(event) {
     // ✅ Store Connection with sessionId in DynamoDB
     await dynamoDB.send(
       new PutCommand({
-        TableName: process.env.DYNAMO_DB_TABLE_NAME,
+        TableName: process.env.WEBSOCKET_CONNECTIONS_TABLE_NAME,
         Item: { sessionId, connectionId, userId, deleteAt: ttl },
       })
     );
