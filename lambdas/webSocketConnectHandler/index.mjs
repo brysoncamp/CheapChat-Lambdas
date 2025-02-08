@@ -1,15 +1,16 @@
-import AWS from "aws-sdk";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 
-const dynamoDB = new AWS.DynamoDB.DocumentClient();
-
-// Use environment variables for non-sensitive values
 const REGION = process.env.AWS_REGION;
 const COGNITO_USER_POOL_ID = process.env.COGNITO_USER_POOL_ID;
 const JWKS_URI = `https://cognito-idp.${REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json`;
 
 const client = jwksClient({ jwksUri: JWKS_URI });
+
+const dynamoDBClient = new DynamoDBClient({ region: REGION });
+const dynamoDB = DynamoDBDocumentClient.from(dynamoDBClient);
 
 function getSigningKey(header, callback) {
   client.getSigningKey(header.kid, (err, key) => {
@@ -50,10 +51,12 @@ export async function handler(event) {
     const ttl = Math.floor(Date.now() / 1000) + 3600; // 1 hour TTL
 
     // ✅ Store Connection with sessionId in DynamoDB
-    await dynamoDB.put({
-      TableName: process.env.DYNAMO_DB_TABLE_NAME,
-      Item: { sessionId, connectionId, userId, deleteAt: ttl },
-    }).promise();
+    await dynamoDB.send(
+      new PutCommand({
+        TableName: process.env.DYNAMO_DB_TABLE_NAME,
+        Item: { sessionId, connectionId, userId, deleteAt: ttl },
+      })
+    );
 
     console.log(`✅ Stored connection: ${connectionId} for user: ${userId} with sessionId: ${sessionId}`);
 
