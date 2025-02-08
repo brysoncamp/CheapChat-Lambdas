@@ -142,6 +142,7 @@ export const handler = async (event) => {
     const params = event.queryStringParameters || {};
     const token = params.token;
     const sessionId = params.sessionId; // ✅ Ensure sessionId is received
+    let conversationId = params.conversationId;
 
     if (!token || !sessionId) {
       console.error("❌ Missing token or sessionId");
