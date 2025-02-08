@@ -16,6 +16,7 @@ const getEnv = (key) => {
 
 // ✅ Store environment variables
 const AWS_REGION = getEnv("AWS_REGION");
+const COGNITO_USER_POOL_ID = getEnv("COGNITO_USER_POOL_ID");
 const CONVERSATIONS_TABLE_NAME = getEnv("CONVERSATIONS_TABLE_NAME");
 const WEBSOCKET_CONNECTIONS_TABLE_NAME = getEnv("WEBSOCKET_CONNECTIONS_TABLE_NAME");
 
@@ -23,16 +24,14 @@ const WEBSOCKET_CONNECTIONS_TABLE_NAME = getEnv("WEBSOCKET_CONNECTIONS_TABLE_NAM
 const dynamoDB = new DynamoDBClient({ region: AWS_REGION });
 
 // ✅ JWKS Client
-const JWKS_URI = `https://cognito-idp.${AWS_REGION}.amazonaws.com/${getEnv(
-  "COGNITO_USER_POOL_ID"
-)}/.well-known/jwks.json`;
+const JWKS_URI = `https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json`;
 const client = jwksClient({ jwksUri: JWKS_URI });
 
-// ✅ Fetch JWKS Signing Key
+// ✅ Fetch JWKS Signing Key (Restored to Previous Working Method)
 function getSigningKey(header, callback) {
   client.getSigningKey(header.kid, (err, key) => {
     if (err) {
-      console.error("Error fetching signing key:", err);
+      console.error("❌ Error fetching signing key:", err);
       return callback(err);
     }
     const signingKey = key.publicKey || key.rsaPublicKey;
@@ -40,33 +39,25 @@ function getSigningKey(header, callback) {
   });
 }
 
-// ✅ Token Verification
+// ✅ Verify Cognito JWT Token
 const verifyToken = async (token) => {
-  try {
-    console.log("🔹 Verifying JWT...");
-    const decoded = await new Promise((resolve, reject) => {
-      jwt.verify(token, getSigningKey, { algorithms: ["RS256"] }, (err, decoded) =>
-        err ? reject(err) : resolve(decoded)
-      );
+  return new Promise((resolve, reject) => {
+    jwt.verify(token, getSigningKey, { algorithms: ["RS256"] }, (err, decoded) => {
+      if (err) {
+        console.error("❌ JWT Verification Failed:", err.message);
+        reject(new Error("Unauthorized: Token verification failed."));
+      } else {
+        console.log("✅ JWT Verified Successfully!", decoded);
+        resolve(decoded);
+      }
     });
-
-    if (!decoded.exp || decoded.exp < Math.floor(Date.now() / 1000)) {
-      console.error("❌ Expired token detected:", decoded.sub);
-      throw new Error("Unauthorized: Token expired.");
-    }
-
-    console.log("✅ Token successfully verified for user:", decoded.sub);
-    return decoded;
-  } catch (error) {
-    console.error("❌ Token verification failed:", error.message);
-    throw new Error("Unauthorized: Token verification failed.");
-  }
+  });
 };
 
 // ✅ Ensure the provided conversationId is valid
 const isValidConversationId = (id) => isUUID(id);
 
-// ✅ Ensure Unique `conversationId` (Checks Conversations Table)
+// ✅ Generate Unique `conversationId` (Checks Conversations Table)
 const generateUniqueConversationId = async () => {
   let conversationId;
   let exists = true;
@@ -86,26 +77,17 @@ const generateUniqueConversationId = async () => {
       );
       exists = !!Item;
     } catch (error) {
-      console.warn(`⚠️ DynamoDB lookup failed (attempt ${attempts}): ${error.message}`);
       exists = false;
     }
   }
 
-  if (exists) {
-    console.warn("⚠️ Max UUID attempts reached. Returning a random UUID without checking.");
-    return randomUUID();
-  }
-
-  return conversationId;
+  return exists ? randomUUID() : conversationId;
 };
 
-// ✅ Check if the user owns the conversation
+// ✅ Check if the user owns the conversation (Search in Conversations Table)
 const userOwnsConversation = async (userId, conversationId) => {
   try {
-    if (!isUUID(conversationId)) {
-      console.error(`❌ Invalid conversationId format: ${conversationId}`);
-      return false;
-    }
+    if (!isUUID(conversationId)) return false;
 
     const { Item } = await dynamoDB.send(
       new GetCommand({
@@ -116,7 +98,6 @@ const userOwnsConversation = async (userId, conversationId) => {
 
     return Item && Item.UserID === userId;
   } catch (error) {
-    console.error(`❌ Error checking conversation ownership: ${error.message}`);
     return false;
   }
 };
@@ -127,7 +108,6 @@ const putItem = async (table, item, condition = null) => {
     const params = { TableName: table, Item: item };
     if (condition) params.ConditionExpression = condition;
 
-    console.log(`🔹 Writing to DynamoDB: ${JSON.stringify(params)}`);
     await dynamoDB.send(new PutCommand(params));
   } catch (error) {
     console.error(`❌ Failed to put item into ${table}: ${error.message}`);
@@ -145,63 +125,56 @@ export const handler = async (event) => {
 
     const params = event.queryStringParameters || {};
     const token = params.token;
+    const sessionId = params.sessionId; // ✅ Client must send a sessionId
     let conversationId = params.conversationId;
 
-    if (!token) {
-      console.error("❌ Missing token");
-      return { statusCode: 401, body: "Unauthorized: Missing token" };
+    if (!token || !sessionId) {
+      console.error("❌ Missing token or sessionId");
+      return { statusCode: 401, body: "Unauthorized: Missing token or sessionId" };
     }
 
-    // ✅ Verify Token
+    console.log("🔹 Verifying Token...");
     const decodedToken = await verifyToken(token);
     const userId = decodedToken.sub;
-    const ttl = Math.floor(Date.now() / 1000) + 3600;
+    console.log(`✅ Token verified for user: ${userId}`);
 
     // ✅ Validate & Verify Conversation ID (if provided)
     if (conversationId) {
       if (!isValidConversationId(conversationId)) {
-        console.error("❌ Invalid conversationId format:", conversationId);
         return { statusCode: 400, body: "Invalid conversationId format." };
       }
 
       const ownsConversation = await userOwnsConversation(userId, conversationId);
       if (!ownsConversation) {
-        console.error(`❌ Unauthorized access attempt by User: ${userId}`);
         return { statusCode: 403, body: "Forbidden: Unauthorized conversation access." };
       }
     } else {
-      // ✅ Generate new conversationId & store in Conversations Table
+      // ✅ If no conversationId, generate a new one and store in Conversations Table
       conversationId = await generateUniqueConversationId();
-      if (!conversationId) {
-        console.error("❌ Failed to generate conversation ID");
-        return { statusCode: 500, body: "Internal Server Error: Failed to create conversation" };
-      }
-
-      console.log(`✅ New Conversation ID: ${conversationId}`);
 
       await putItem(
-        CONVERSATIONS_TABLE_NAME,
+        CONVERSATIONS_TABLE_NAME, // ✅ Store conversation details
         {
           ConversationID: conversationId,
           UserID: userId,
           Title: "New Conversation",
           CreatedAt: Date.now(),
           LastMessageAt: Date.now(),
-          TTL: ttl + 2592000,
+          TTL: Math.floor(Date.now() / 1000) + 2592000, // 30-day expiration
         },
         "attribute_not_exists(ConversationID)"
       );
     }
 
-    // ✅ Store WebSocket connection
+    // ✅ Store WebSocket connection in WebSocketConnections Table
     await putItem(WEBSOCKET_CONNECTIONS_TABLE_NAME, {
       ConnectionID: connectionId,
+      SessionID: sessionId,
       ConversationID: conversationId,
       UserID: userId,
-      DeleteAt: ttl,
+      DeleteAt: Math.floor(Date.now() / 1000) + 3600,
     });
 
-    console.log(`✅ Connection stored successfully for Connection ID: ${connectionId}`);
     return { statusCode: 200, body: JSON.stringify({ message: "Connected", conversationId }) };
   } catch (error) {
     console.error("❌ Lambda Execution Error:", error);
