@@ -97,11 +97,11 @@ export const handler = async (event) => {
 
     const params = event.queryStringParameters || {};
     const token = params.token;
-    let conversationId = params.conversationId;
+    const sessionId = params.sessionId; // ✅ Ensure sessionId is received
 
-    if (!token) {
-      console.error("❌ Missing token");
-      return { statusCode: 401, body: "Unauthorized: Missing token" };
+    if (!token || !sessionId) {
+      console.error("❌ Missing token or sessionId");
+      return { statusCode: 401, body: "Unauthorized: Missing token or sessionId" };
     }
 
     // ✅ Verify Token
@@ -109,32 +109,21 @@ export const handler = async (event) => {
     const userId = decodedToken.sub;
     const ttl = Math.floor(Date.now() / 1000) + 3600;
 
-    // ✅ Validate & Verify Conversation ID (if provided)
-    if (conversationId) {
-      if (!isValidConversationId(conversationId)) {
-        console.error("❌ Invalid conversationId format:", conversationId);
-        return { statusCode: 400, body: "Invalid conversationId format." };
-      }
-    } else {
-      // ✅ Generate new conversationId
-      conversationId = await generateUniqueConversationId();
-      if (!conversationId) {
-        console.error("❌ Failed to generate conversation ID");
-        return { statusCode: 500, body: "Internal Server Error: Failed to create conversation" };
-      }
-      console.log(`✅ New Conversation ID: ${conversationId}`);
-    }
-
     // ✅ Store WebSocket connection
     await dynamoDB.send(
       new PutCommand({
         TableName: WEBSOCKET_CONNECTIONS_TABLE_NAME,
-        Item: { ConnectionID: connectionId, ConversationID: conversationId, UserID: userId, DeleteAt: ttl },
+        Item: {
+          sessionId, // ✅ Ensure sessionId is included
+          ConnectionID: connectionId,
+          UserID: userId,
+          DeleteAt: ttl,
+        },
       })
     );
 
     console.log(`✅ Connection stored successfully for Connection ID: ${connectionId}`);
-    return { statusCode: 200, body: JSON.stringify({ message: "Connected", conversationId }) };
+    return { statusCode: 200, body: JSON.stringify({ message: "Connected", sessionId }) };
   } catch (error) {
     console.error("❌ Lambda Execution Error:", error);
     return { statusCode: 500, body: "Internal Server Error" };
