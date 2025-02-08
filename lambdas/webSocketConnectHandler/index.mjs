@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 import { randomUUID } from "crypto";
 import { validate as isUUID } from "uuid";
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+
 
 // ✅ Fetch environment variables safely
 const getEnv = (key) => {
@@ -19,9 +21,13 @@ const AWS_REGION = getEnv("AWS_REGION");
 const CONVERSATIONS_TABLE_NAME = getEnv("CONVERSATIONS_TABLE_NAME");
 const WEBSOCKET_CONNECTIONS_TABLE_NAME = getEnv("WEBSOCKET_CONNECTIONS_TABLE_NAME");
 const COGNITO_USER_POOL_ID = getEnv("COGNITO_USER_POOL_ID");
+const WEBSOCKET_ENDPOINT = getEnv("WEBSOCKET_ENDPOINT");
 
 // ✅ Initialize AWS DynamoDB Client
 const dynamoDB = new DynamoDBClient({ region: AWS_REGION });
+
+// ✅ Initialize AWS API Gateway Management API Client
+const apiGateway = new ApiGatewayManagementApiClient({ endpoint: WEBSOCKET_ENDPOINT });
 
 // ✅ JWKS Client
 const JWKS_URI = `https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json`;
@@ -131,7 +137,6 @@ export const handler = async (event) => {
   try {
     //const { connectionId } = event.requestContext;
     // const { connectionId } = event.requestContext;
-    let { conversationId } = event.requestContext;
     //console.log("✅ Connection ID:", connectionId);
 
     const params = event.queryStringParameters || {};
@@ -184,8 +189,6 @@ export const handler = async (event) => {
       );
     }
 
-
-
     // ✅ Store WebSocket connection
     await dynamoDB.send(
       new PutCommand({
@@ -199,6 +202,10 @@ export const handler = async (event) => {
       })
 
     );
+
+    await apiGateway.send(new PostToConnectionCommand({
+      Data: JSON.stringify({ conversationId: conversationId })
+    }));
 
     //console.log(`✅ Connection stored successfully for Connection ID: ${connectionId}`);
     return { statusCode: 200, body: JSON.stringify({ message: "Connected", conversationId }) };
