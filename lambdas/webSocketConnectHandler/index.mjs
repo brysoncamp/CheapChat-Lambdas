@@ -134,46 +134,55 @@ const putItem = async (table, item, condition = null) => {
   }
 };
 
-// ✅ WebSocket Connect Handler
 export const handler = async (event) => {
   console.log("🟢 WebSocket Connection Event:", JSON.stringify(event, null, 2));
 
-  const { connectionId } = event.requestContext;
-  const params = event.queryStringParameters || {};
-  const token = params.token;
-  let conversationId = params.conversationId;
-
-  if (!token) {
-    console.error("❌ Missing token");
-    return { statusCode: 401, body: "Unauthorized: Missing token" };
-  }
-
   try {
+    const { connectionId } = event.requestContext;
+    console.log("✅ Connection ID:", connectionId);  // LOG 1
+
+    const params = event.queryStringParameters || {};
+    console.log("✅ Query Params:", params);  // LOG 2
+
+    const token = params.token;
+    let conversationId = params.conversationId;
+    console.log("✅ Token received:", token ? "Yes" : "No");  // LOG 3
+
+    if (!token) {
+      console.error("❌ Missing token");
+      return { statusCode: 401, body: "Unauthorized: Missing token" };
+    }
+
     // ✅ Verify Token
+    console.log("🔹 Verifying Token...");
     const decodedToken = await verifyToken(token);
-    console.log("✅ Decoded Token:", decodedToken);
+    console.log("✅ Decoded Token:", decodedToken);  // LOG 4
 
     const userId = decodedToken.sub;
     const ttl = Math.floor(Date.now() / 1000) + 3600; // 1 hour TTL
+    console.log("✅ User ID:", userId, "TTL:", ttl);  // LOG 5
 
     // ✅ Validate and Verify Conversation ID (if provided)
     if (conversationId) {
+      console.log("🔹 Validating provided conversationId:", conversationId);  // LOG 6
+
       if (!isValidConversationId(conversationId)) {
-        console.error("❌ Invalid conversationId format detected:", conversationId);
+        console.error("❌ Invalid conversationId format:", conversationId);
         return { statusCode: 400, body: "Invalid conversationId format." };
       }
 
+      console.log("🔹 Checking conversation ownership...");
       const ownsConversation = await userOwnsConversation(userId, conversationId);
+      console.log("✅ Conversation Ownership:", ownsConversation);  // LOG 7
+
       if (!ownsConversation) {
-        console.error(
-          `❌ Unauthorized access attempt by User: ${userId}, IP: ${event.requestContext.identity.sourceIp}, Origin: ${event.headers?.origin || "unknown"} to Conversation: ${conversationId}`
-        );
+        console.error(`❌ Unauthorized access attempt by User: ${userId}`);
         return { statusCode: 403, body: "Forbidden: Unauthorized conversation access." };
       }
     } else {
-      // ✅ If no conversationId, generate a unique one
+      console.log("🔹 Generating a new conversationId...");
       conversationId = await generateUniqueConversationId();
-      console.log(`🆕 Generated unique Conversation ID: ${conversationId}`);
+      console.log("✅ New Conversation ID:", conversationId);  // LOG 8
 
       await putItem(
         DYNAMO_DB_TABLE_NAME,
@@ -185,11 +194,11 @@ export const handler = async (event) => {
           LastMessageAt: Date.now(),
           TTL: ttl + 2592000, // 30-day expiration
         },
-        "attribute_not_exists(ConversationID)" // ✅ Prevents overwriting existing conversations
+        "attribute_not_exists(ConversationID)" 
       );
     }
 
-    // ✅ Store WebSocket connection
+    console.log("🔹 Storing WebSocket connection in DynamoDB...");
     await putItem(DYNAMO_DB_TABLE_NAME, {
       ConnectionID: connectionId,
       ConversationID: conversationId,
@@ -197,9 +206,11 @@ export const handler = async (event) => {
       DeleteAt: ttl,
     });
 
+    console.log("✅ Connection stored. Returning success response.");  // LOG 9
+
     return { statusCode: 200, body: JSON.stringify({ message: "Connected", conversationId }) };
   } catch (error) {
-    console.error("❌ Token validation failed:", error);
-    return { statusCode: 401, body: "Unauthorized: Invalid token" };
+    console.error("❌ Lambda Execution Error:", error);  // LOG 10
+    return { statusCode: 500, body: "Internal Server Error" };
   }
 };
