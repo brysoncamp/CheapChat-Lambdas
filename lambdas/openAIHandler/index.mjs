@@ -72,7 +72,7 @@ export const handler = async (event) => {
 
     // ✅ Start a separate timeout that marks the request as timed out
     const timeout = setTimeout(async () => {
-      console.log(`⚠️ Timeout reached for connection ${}`);
+      console.log(`⚠️ Timeout reached for connection ${sessionId}`);
       timeoutTriggered = true;
     }, timeoutMs);
 
@@ -110,7 +110,7 @@ export const handler = async (event) => {
       stream_options: { include_usage: true },
     });
 
-    console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${}`);
+    console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${sessionId}`);
 
     let promptTokens = 0;
     let completionTokens = 0;
