@@ -53,11 +53,11 @@ const countTokensForMessages = (messages, model = "gpt-4o") => {
 export const handler = async (event) => {
   console.log("🟢 OpenAI Handler Event:", JSON.stringify(event, null, 2));
 
-  const { connectionId, sessionId, message } = event;
-  if (!connectionId || !sessionId) {
+  const { conversationId, sessionId, message } = event;
+  if (!sessionId) {
     return {
       statusCode: 400,
-      body: "Invalid request: Missing connectionId or sessionId",
+      body: "Invalid request: Missing sessionId",
     };
   }
 
@@ -72,7 +72,7 @@ export const handler = async (event) => {
 
     // ✅ Start a separate timeout that marks the request as timed out
     const timeout = setTimeout(async () => {
-      console.log(`⚠️ Timeout reached for connection ${connectionId}`);
+      console.log(`⚠️ Timeout reached for connection ${}`);
       timeoutTriggered = true;
     }, timeoutMs);
 
@@ -110,7 +110,7 @@ export const handler = async (event) => {
       stream_options: { include_usage: true },
     });
 
-    console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${connectionId}`);
+    console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${}`);
 
     let promptTokens = 0;
     let completionTokens = 0;
@@ -132,7 +132,6 @@ export const handler = async (event) => {
 
         if (isCanceled) {
           await apiGateway.send(new PostToConnectionCommand({
-            ConnectionId: connectionId,
             Data: JSON.stringify({ canceled: true }),
           }));
 
@@ -145,7 +144,6 @@ export const handler = async (event) => {
 
         if (timeoutTriggered) {
           await apiGateway.send(new PostToConnectionCommand({
-            ConnectionId: connectionId,
             Data: JSON.stringify({ timeout: true }),
           }));
         }
@@ -156,7 +154,6 @@ export const handler = async (event) => {
       const text = chunk.choices?.[0]?.delta?.content || "";
       if (text) {
         await apiGateway.send(new PostToConnectionCommand({
-          ConnectionId: connectionId,
           Data: JSON.stringify({ text }),
         }));
         fullResponse += text;
@@ -169,7 +166,6 @@ export const handler = async (event) => {
     // ✅ If request wasn't canceled, send "done"
     if (!timeoutTriggered && !isCanceled) {
       await apiGateway.send(new PostToConnectionCommand({
-        ConnectionId: connectionId,
         Data: JSON.stringify({ done: true }),
       }));
     }
