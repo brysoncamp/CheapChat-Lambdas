@@ -41,23 +41,51 @@ const getSigningKey = async (header) => {
 // ✅ Token Verification with Expiration Check
 const verifyToken = async (token) => {
   try {
+    console.log("🔹 Starting token verification...");
+
+    console.log("🔹 Fetching signing key...");
+    const getKey = async (header, callback) => {
+      try {
+        const key = await client.getSigningKey(header.kid);
+        console.log("✅ Signing Key Fetched:", key);
+        callback(null, key.getPublicKey());
+      } catch (error) {
+        console.error("❌ Failed to fetch signing key:", error.message);
+        callback(error);
+      }
+    };
+
+    console.log("🔹 Decoding JWT...");
     const decoded = await new Promise((resolve, reject) => {
-      verify(token, getSigningKey, { algorithms: ["RS256"] }, (err, decoded) =>
-        err ? reject(err) : resolve(decoded)
-      );
+      verify(token, getKey, { algorithms: ["RS256"] }, (err, decoded) => {
+        if (err) {
+          console.error("❌ JWT Verification Error:", err.message);
+          reject(err);
+        } else {
+          console.log("✅ Token Decoded:", decoded);
+          resolve(decoded);
+        }
+      });
     });
+
+    if (!decoded || !decoded.sub) {
+      console.error("❌ Token Decoding Failed: No user ID found.");
+      throw new Error("Unauthorized: Invalid token payload.");
+    }
 
     if (!decoded.exp || decoded.exp < Math.floor(Date.now() / 1000)) {
       console.error("❌ Expired token detected:", decoded.sub);
       throw new Error("Unauthorized: Token expired.");
     }
 
+    console.log("✅ Token successfully verified for user:", decoded.sub);
     return decoded;
   } catch (error) {
     console.error("❌ Token verification failed:", error.message);
     throw new Error("Unauthorized: Token verification failed.");
   }
 };
+
 
 // ✅ Ensure the provided conversationId is valid
 const isValidConversationId = (id) => isUUID(id);
