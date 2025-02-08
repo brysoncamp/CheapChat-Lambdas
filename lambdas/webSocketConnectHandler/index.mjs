@@ -1,7 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { PutCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
-import jwt from "jsonwebtoken";  // ✅ Import full module
-const { verify } = jwt;
+import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 import { randomUUID } from "crypto";
 import { validate as isUUID } from "uuid";
@@ -45,7 +44,7 @@ const verifyToken = async (token) => {
   try {
     console.log("🔹 Verifying JWT...");
     const decoded = await new Promise((resolve, reject) => {
-      verify(token, getSigningKey, { algorithms: ["RS256"] }, (err, decoded) =>
+      jwt.verify(token, getSigningKey, { algorithms: ["RS256"] }, (err, decoded) =>
         err ? reject(err) : resolve(decoded)
       );
     });
