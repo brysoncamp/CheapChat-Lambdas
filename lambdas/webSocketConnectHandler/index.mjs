@@ -74,7 +74,7 @@ const generateUniqueConversationId = async () => {
       const { Item } = await dynamoDB.send(
         new GetCommand({
           TableName: CONVERSATIONS_TABLE_NAME,
-          Key: { ConversationID: conversationId },
+          Key: { conversationId: conversationId },
         })
       );
       exists = !!Item;
@@ -87,13 +87,52 @@ const generateUniqueConversationId = async () => {
   return exists ? randomUUID() : conversationId;
 };
 
+
+// ✅ Check if the user owns the conversation
+const userOwnsConversation = async (userId, conversationId) => {
+  try {
+    if (!isUUID(conversationId)) {
+      console.error(`❌ Invalid conversationId format: ${conversationId}`);
+      return false;
+    }
+
+    const { Item } = await dynamoDB.send(
+      new GetCommand({
+        TableName: CONVERSATIONS_TABLE_NAME,
+        Key: { conversationId: conversationId },
+      })
+    );
+
+    return Item && Item.userId === userId;
+  } catch (error) {
+    console.error(`❌ Error checking conversation ownership: ${error.message}`);
+    return false;
+  }
+};
+
+// ✅ Insert Item into DynamoDB with Error Handling
+const putItem = async (table, item, condition = null) => {
+  try {
+    const params = { TableName: table, Item: item };
+    if (condition) params.ConditionExpression = condition;
+
+    console.log(`🔹 Writing to DynamoDB: ${JSON.stringify(params)}`);
+    await dynamoDB.send(new PutCommand(params));
+  } catch (error) {
+    console.error(`❌ Failed to put item into ${table}: ${error.message}`);
+    throw new Error("Database insert failed");
+  }
+};
+
 // ✅ WebSocket Connect Handler
 export const handler = async (event) => {
   console.log("🟢 WebSocket Connection Event:", JSON.stringify(event, null, 2));
 
   try {
-    const { connectionId } = event.requestContext;
-    console.log("✅ Connection ID:", connectionId);
+    //const { connectionId } = event.requestContext;
+    // const { connectionId } = event.requestContext;
+    let { conversationId } = event.requestContext;
+    //console.log("✅ Connection ID:", connectionId);
 
     const params = event.queryStringParameters || {};
     const token = params.token;
@@ -109,20 +148,59 @@ export const handler = async (event) => {
     const userId = decodedToken.sub;
     const ttl = Math.floor(Date.now() / 1000) + 3600;
 
+    // ✅ Validate & Verify Conversation ID (if provided)
+    if (conversationId) {
+      if (!isValidConversationId(conversationId)) {
+        console.error("❌ Invalid conversationId format:", conversationId);
+        return { statusCode: 400, body: "Invalid conversationId format." };
+      }
+
+      const ownsConversation = await userOwnsConversation(userId, conversationId);
+      if (!ownsConversation) {
+        console.error(`❌ Unauthorized access attempt by User: ${userId}`);
+        return { statusCode: 403, body: "Forbidden: Unauthorized conversation access." };
+      }
+    } else {
+      // ✅ Generate new conversationId & store in Conversations Table
+      conversationId = await generateUniqueConversationId();
+      if (!conversationId) {
+        console.error("❌ Failed to generate conversation ID");
+        return { statusCode: 500, body: "Internal Server Error: Failed to create conversation" };
+      }
+
+      console.log(`✅ New Conversation ID: ${conversationId}`);
+
+      await putItem(
+        CONVERSATIONS_TABLE_NAME,
+        {
+          conversationId: conversationId,
+          userId: userId,
+          title: "New Conversation",
+          createdAt: Date.now(),
+          lastMessageAt: Date.now(),
+          deleteAt: ttl + 2592000,
+        },
+        "attribute_not_exists(conversationId)"
+      );
+    }
+
+
+
     // ✅ Store WebSocket connection
     await dynamoDB.send(
       new PutCommand({
         TableName: WEBSOCKET_CONNECTIONS_TABLE_NAME,
         Item: {
           sessionId, // ✅ Ensure sessionId is included
-          ConnectionID: connectionId,
-          UserID: userId,
-          DeleteAt: ttl,
+          conversationId: conversationId,
+          userId: userId,
+          deleteAt: ttl,
         },
       })
+
     );
 
-    console.log(`✅ Connection stored successfully for Connection ID: ${connectionId}`);
+    //console.log(`✅ Connection stored successfully for Connection ID: ${connectionId}`);
     return { statusCode: 200, body: JSON.stringify({ message: "Connected", sessionId }) };
   } catch (error) {
     console.error("❌ Lambda Execution Error:", error);
