@@ -38,7 +38,7 @@ export const handler = async (event) => {
     }
 
     connectionId = result.Item.connectionId;
-    conversationId = result.Item.conversationId;
+    const conversationId = result.Item.conversationId;
     console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);
 
     await apiGateway.send(new PostToConnectionCommand({
