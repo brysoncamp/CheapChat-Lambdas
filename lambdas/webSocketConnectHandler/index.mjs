@@ -205,10 +205,14 @@ export const handler = async (event) => {
 
     );
 
+    console.log("CONNECTION ID:", connectionId);
+
+    /*
     await apiGateway.send(new PostToConnectionCommand({
       ConnectionId: connectionId, // ✅ Correct placement
       Data: JSON.stringify({ conversationId: conversationId }) // ✅ Send only conversationId inside Data
     }));
+    */
     
     return { statusCode: 200, body: "Connected" };
   } catch (error) {
