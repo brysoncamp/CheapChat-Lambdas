@@ -29,15 +29,16 @@ const JWKS_URI = `https://cognito-idp.${AWS_REGION}.amazonaws.com/${getEnv(
 const client = jwksClient({ jwksUri: JWKS_URI });
 
 // ✅ Fetch JWKS Signing Key
-const getSigningKey = async (header) => {
-  try {
-    const key = await client.getSigningKey(header.kid);
-    return key.getPublicKey();
-  } catch (err) {
-    console.error("❌ Error fetching signing key:", err);
-    throw err;
-  }
-};
+function getSigningKey(header, callback) {
+  client.getSigningKey(header.kid, (err, key) => {
+    if (err) {
+      console.error("Error fetching signing key:", err);
+      return callback(err);
+    }
+    const signingKey = key.publicKey || key.rsaPublicKey;
+    callback(null, signingKey);
+  });
+}
 
 // ✅ Token Verification
 const verifyToken = async (token) => {
