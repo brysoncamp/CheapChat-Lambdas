@@ -135,14 +135,13 @@ export const handler = async (event) => {
   console.log("🟢 WebSocket Connection Event:", JSON.stringify(event, null, 2));
 
   try {
-    //const { connectionId } = event.requestContext;
+    const { connectionId } = event.requestContext;
     // const { connectionId } = event.requestContext;
     //console.log("✅ Connection ID:", connectionId);
 
     const params = event.queryStringParameters || {};
     const token = params.token;
     const sessionId = params.sessionId; // ✅ Ensure sessionId is received
-    let conversationId = params.conversationId;
 
     if (!token || !sessionId) {
       console.error("❌ Missing token or sessionId");
@@ -205,7 +204,10 @@ export const handler = async (event) => {
     );
 
     await apiGateway.send(new PostToConnectionCommand({
-      Data: JSON.stringify({ conversationId: conversationId })
+      Data: JSON.stringify({ 
+        ConnectionId: connectionId,
+        Data: JSON.stringify({ conversationId: conversationId }),
+       })
     }));
 
     //console.log(`✅ Connection stored successfully for Connection ID: ${connectionId}`);
