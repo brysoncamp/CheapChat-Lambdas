@@ -212,7 +212,7 @@ export const handler = async (event) => {
     }));
 
     //console.log(`✅ Connection stored successfully for Connection ID: ${connectionId}`);
-    return { statusCode: 200, body: JSON.stringify({ message: "Connected", conversationId }) };
+    return { statusCode: 200, body: JSON.stringify({ message: "ConnectionId", connectionId }) };
   } catch (error) {
     console.error("❌ Lambda Execution Error:", error);
     return { statusCode: 500, body: "Internal Server Error" };
