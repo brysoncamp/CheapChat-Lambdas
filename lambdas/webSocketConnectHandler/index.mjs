@@ -1,6 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { PutCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
-import { verify } from "jsonwebtoken";
+import jwt from "jsonwebtoken";  // ✅ FIXED: Import full module
+const { verify } = jwt;          // ✅ FIXED: Destructure `verify`
 import jwksClient from "jwks-rsa";
 import { randomUUID } from "crypto";
 import { validate as isUUID } from "uuid";
