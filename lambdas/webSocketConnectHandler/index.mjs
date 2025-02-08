@@ -196,6 +196,7 @@ export const handler = async (event) => {
         TableName: WEBSOCKET_CONNECTIONS_TABLE_NAME,
         Item: {
           sessionId, // ✅ Ensure sessionId is included
+          connectionId: connectionId,
           conversationId: conversationId,
           userId: userId,
           deleteAt: ttl,
@@ -209,9 +210,7 @@ export const handler = async (event) => {
       Data: JSON.stringify({ conversationId }) // ✅ Send only conversationId inside Data
     }));
     
-
-    //console.log(`✅ Connection stored successfully for Connection ID: ${connectionId}`);
-    return { statusCode: 200, body: JSON.stringify({ message: "ConnectionId", connectionId }) };
+    return { statusCode: 200, body: "Connected" };
   } catch (error) {
     console.error("❌ Lambda Execution Error:", error);
     return { statusCode: 500, body: "Internal Server Error" };
