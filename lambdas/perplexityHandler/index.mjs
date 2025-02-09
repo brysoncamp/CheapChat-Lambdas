@@ -92,13 +92,14 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
       if (timeoutTriggered || isCanceled) return;
 
       try {
-        const chunkString = chunk.toString();
+        const chunkString = chunk.toString().trim();
         console.log("🔹 RAW CHUNK RECEIVED:", chunkString); // ✅ Debug log
 
-        //const jsonMatch = chunkString.match(/^data:\s*(\{.*\})/);
-        //if (!jsonMatch) return;
+        // ✅ Remove "data: " prefix safely
+        const jsonStr = chunkString.replace(/^data:\s*/, "").trim();
 
-        const jsonData = JSON.parse(jsonMatch[1]); // ✅ Now safely parse JSON
+        // ✅ Parse JSON safely
+        const jsonData = JSON.parse(jsonStr);
         console.log("🔹 Parsed JSON Data:", JSON.stringify(jsonData, null, 2));
 
         // ✅ Extract and send Citations (Only from the first chunk)
