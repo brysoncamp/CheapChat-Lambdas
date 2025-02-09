@@ -83,14 +83,19 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
       timeoutTriggered = true;
     }, 60000);
 
-    // ✅ Process Streamed Data
+    // ✅ Process Streamed Data (Fixes JSON Parsing Issue)
     response.data.on("data", async (chunk) => {
       if (timeoutTriggered || isCanceled) return;
+
       try {
-        const chunkData = JSON.parse(chunk.toString());
+        const chunkString = chunk.toString();
+        const jsonMatch = chunkString.match(/^data:\s*(\{.*\})/); // ✅ Extract JSON from "data: {...}"
+        if (!jsonMatch) return; // Skip invalid chunks
+
+        const jsonData = JSON.parse(jsonMatch[1]); // ✅ Now safely parse JSON
 
         // ✅ Extract and send text response
-        const text = chunkData.choices?.[0]?.delta?.content || "";
+        const text = jsonData.choices?.[0]?.delta?.content || "";
         if (text) {
           await apiGateway.send(new PostToConnectionCommand({
             ConnectionId: connectionId,
@@ -99,7 +104,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
           fullResponse += text;
         }
       } catch (error) {
-        console.error("⚠️ Error parsing chunk:", error);
+        console.error("⚠️ Error parsing SSE chunk:", error);
       }
     });
 
