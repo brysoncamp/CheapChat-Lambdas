@@ -18,6 +18,7 @@ jobs:
           - webSocketConnectHandler
           - messageRouterHandler
           - openAIHandler
+          - perplexityHandler
 
     steps:
       - name: Checkout code
