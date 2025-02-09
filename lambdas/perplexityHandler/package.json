@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.744.0",
+    "@aws-sdk/client-dynamodb": "^3.744.0",
+    "@aws-sdk/client-secrets-manager": "^3.744.0",
+    "@aws-sdk/lib-dynamodb": "^3.744.0",
+    "node-fetch": "^3.3.2"
+  }
+}
