@@ -93,10 +93,10 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
 
       try {
         const chunkString = chunk.toString();
-        //console.log("🔹 RAW CHUNK RECEIVED:", chunkString); // ✅ Debug log
+        console.log("🔹 RAW CHUNK RECEIVED:", chunkString); // ✅ Debug log
 
-        const jsonMatch = chunkString.match(/^data:\s*(\{.*\})/);
-        if (!jsonMatch) return;
+        //const jsonMatch = chunkString.match(/^data:\s*(\{.*\})/);
+        //if (!jsonMatch) return;
 
         const jsonData = JSON.parse(jsonMatch[1]); // ✅ Now safely parse JSON
         console.log("🔹 Parsed JSON Data:", JSON.stringify(jsonData, null, 2));
