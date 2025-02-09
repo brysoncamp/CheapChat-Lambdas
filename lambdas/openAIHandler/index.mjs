@@ -104,7 +104,7 @@ export const handler = async (event) => {
 
     // ✅ OpenAI Streaming Request
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "chatgpt-4o-latest",
       messages: messages,
       stream: true,
       stream_options: { include_usage: true },

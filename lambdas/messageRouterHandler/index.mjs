@@ -42,7 +42,7 @@ export const handler = async (event) => {
     console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);
 
     await apiGateway.send(new PostToConnectionCommand({
-      ConnectionId: connectionId, // ✅ Correct placement
+      ConnectionI: connectionId, // ✅ Correct placement
       Data: JSON.stringify({ conversationId: conversationId }) // ✅ Send only conversationId inside Data
     }));
 
@@ -69,7 +69,11 @@ export const handler = async (event) => {
   }
 
   // ✅ 3. Route messages to OpenAI Lambda
-  const lambdaFunctionMap = { openai: "openAIHandler" };
+  const lambdaFunctionMap = { 
+    openai: "openAIHandler",
+    perplexity: "perplexityHandler"
+  };
+
   const functionName = lambdaFunctionMap[action];
 
   if (!functionName) {
