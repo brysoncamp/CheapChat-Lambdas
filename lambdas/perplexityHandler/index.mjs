@@ -32,45 +32,126 @@ const estimateTokens = (text) => {
 };
 
 // Function to handle Perplexity API Request
-const fetchPerplexityResponse = async (messages) => {
-    const apiKey = await getPerplexityKey();
-    
-    console.log("🔹 Fetching response from Perplexity...");
-    
-    try {
-      const response = await fetch("https://api.perplexity.ai/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "sonar",
-          messages: messages,
-          stream: false,
-        }),
-      });
-  
-      console.log(`🔹 API Response Status: ${response.status}`);
-  
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`❌ Perplexity API error: ${response.statusText} - ${errorBody}`);
-        throw new Error(`Perplexity API error: ${response.statusText}`);
-      }
-  
-      console.log("✅ Successfully received response from Perplexity");
-  
-      const jsonResponse = await response.json();
-      console.log("🔹 Perplexity Response JSON:", JSON.stringify(jsonResponse, null, 2));
-  
-      return jsonResponse;
-    } catch (error) {
-      console.error("❌ Error fetching response from Perplexity:", error);
-      throw error;
+const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
+  const apiKey = await getPerplexityKey();
+  console.log("🔹 Fetching streaming response from Perplexity...");
+
+  try {
+    const response = await fetch("https://api.perplexity.ai/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "sonar",
+        messages: messages,
+        stream: true, // ✅ Enable streaming
+      }),
+    });
+
+    console.log(`🔹 API Response Status: ${response.status}`);
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error(`❌ Perplexity API error: ${response.statusText} - ${errorBody}`);
+      throw new Error(`Perplexity API error: ${response.statusText}`);
     }
-  };
-  
+
+    console.log("✅ Streaming response from Perplexity...");
+
+    // ✅ Read streaming response in chunks
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullResponse = "";
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let totalTokens = 0;
+    let receivedUsage = false;
+    let isCanceled = false;
+    let timeoutTriggered = false;
+
+    // ✅ Start checking for cancellation
+    const checkCancellation = async () => {
+      while (!isCanceled && !timeoutTriggered) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        try {
+          const checkResult = await dynamoDB.send(new GetCommand({
+            TableName: CONNECTIONS_TABLE,
+            Key: { sessionId },
+          }));
+          if (checkResult.Item?.canceled) {
+            isCanceled = true;
+          }
+        } catch (err) {
+          console.error(`❌ Error checking session cancellation: ${err.message}`);
+        }
+      }
+    };
+    checkCancellation();
+
+    // ✅ Start a timeout to prevent infinite waits
+    const timeout = setTimeout(() => {
+      console.log(`⚠️ Timeout reached for connection ${connectionId}`);
+      timeoutTriggered = true;
+    }, 60000);
+
+    // ✅ Process the streaming response
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done || timeoutTriggered || isCanceled) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      console.log("🔹 Received chunk:", chunk);
+
+      try {
+        const chunkData = JSON.parse(chunk);
+
+        // ✅ Extract token usage if available
+        if (chunkData.usage) {
+          promptTokens = chunkData.usage.prompt_tokens;
+          completionTokens = chunkData.usage.completion_tokens;
+          totalTokens = chunkData.usage.total_tokens;
+          receivedUsage = true;
+        }
+
+        // ✅ Extract text response
+        const text = chunkData.choices?.[0]?.delta?.content || "";
+        if (text) {
+          await apiGateway.send(new PostToConnectionCommand({
+            ConnectionId: connectionId,
+            Data: JSON.stringify({ text }),
+          }));
+          fullResponse += text;
+        }
+      } catch (error) {
+        console.error("⚠️ Error parsing chunk:", error);
+      }
+    }
+
+    // ✅ Cleanup
+    clearTimeout(timeout);
+
+    // ✅ If request wasn't canceled, send "done"
+    if (!timeoutTriggered && !isCanceled) {
+      await apiGateway.send(new PostToConnectionCommand({
+        ConnectionId: connectionId,
+        Data: JSON.stringify({ done: true }),
+      }));
+    }
+
+    return {
+      fullResponse,
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      receivedUsage,
+    };
+  } catch (error) {
+    console.error("❌ Error fetching streaming response from Perplexity:", error);
+    throw error;
+  }
+};
 
 // Main Lambda Handler
 export const handler = async (event) => {
@@ -87,90 +168,31 @@ export const handler = async (event) => {
   try {
     console.log(`Sending message to Perplexity: ${message}`);
 
-    let isCanceled = false;
-    let timeoutTriggered = false;
-    const timeoutMs = 60000;
-
-    // Timeout Mechanism
-    const timeout = setTimeout(() => {
-      console.log(`Timeout reached for connection ${connectionId}`);
-      timeoutTriggered = true;
-    }, timeoutMs);
-
-    // Check for Cancellation
-    const checkCancellation = async () => {
-      while (!isCanceled && !timeoutTriggered) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        try {
-          const checkResult = await dynamoDB.send(
-            new GetCommand({
-              TableName: CONNECTIONS_TABLE,
-              Key: { sessionId },
-            })
-          );
-
-          if (checkResult.Item?.canceled) {
-            isCanceled = true;
-          }
-        } catch (err) {
-          console.error(`Error checking session cancellation: ${err.message}`);
-        }
-      }
-    };
-
-    checkCancellation();
-
-    // Prepare messages
+    // ✅ Prepare messages
     const messages = [{ role: "user", content: message }];
 
-    // Fetch Perplexity Response
-    const perplexityResponse = await fetchPerplexityResponse(messages);
-
-    console.log(`Streaming Perplexity response back to WebSocket client: ${connectionId}`);
-
-    const fullResponse = perplexityResponse.choices?.[0]?.message?.content || "";
-
-    if (fullResponse) {
-      await apiGateway.send(
-        new PostToConnectionCommand({
-          ConnectionId: connectionId,
-          Data: JSON.stringify({ text: fullResponse }),
-        })
-      );
-    }
+    // ✅ Fetch Perplexity Streaming Response
+    const { fullResponse, promptTokens, completionTokens, totalTokens, receivedUsage } =
+      await fetchPerplexityResponse(messages, connectionId, sessionId);
 
     clearTimeout(timeout);
 
-    // If request wasn't canceled, send "done"
-    if (!timeoutTriggered && !isCanceled) {
-      await apiGateway.send(
-        new PostToConnectionCommand({
-          ConnectionId: connectionId,
-          Data: JSON.stringify({ done: true }),
-        })
-      );
-    }
-
-    // Estimate Token Usage
+    // ✅ Estimate Token Usage
     const promptTokensEstimate = estimateTokens(message);
     const completionTokensEstimate = estimateTokens(fullResponse);
 
-    // Actual Token Usage from API Response
-    const promptTokensActual = perplexityResponse.usage?.prompt_tokens || 0;
-    const completionTokensActual = perplexityResponse.usage?.completion_tokens || 0;
-    const totalTokensActual = perplexityResponse.usage?.total_tokens || 0;
+    console.log(`🟢 Token Usage (Estimated): Prompt = ${promptTokensEstimate}, Completion = ${completionTokensEstimate}`);
+    if (receivedUsage) {
+      console.log(`🟢 Token Usage (Actual): Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`);
+    }
 
-    console.log(`Token Usage (Estimated): Prompt = ${promptTokensEstimate}, Completion = ${completionTokensEstimate}`);
-    console.log(`Token Usage (Actual): Prompt = ${promptTokensActual}, Completion = ${completionTokensActual}, Total = ${totalTokensActual}`);
-
-    console.log("Response sent successfully");
-    return { statusCode: 200, body: "Response sent to client" };
+    console.log("✅ Response sent successfully");
+    return { statusCode: 200, body: "Streaming response sent to client" };
   } catch (error) {
     console.error("Perplexity API Error:", error);
     return {
       statusCode: 500,
-      body: "Error contacting Perplexity or processing the response",
+      body: "Error streaming response from Perplexity",
     };
   }
 };
