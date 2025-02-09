@@ -87,35 +87,45 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
       timeoutTriggered = true;
     }, 60000);
 
-    // ✅ Process Streamed Data (Handles Citations + Last Chunk for Tokens)
-    response.data.on("data", async (chunk) => {
-      if (timeoutTriggered || isCanceled) return;
+    let buffer = ""; // ✅ Store incomplete chunks
 
+response.data.on("data", async (chunk) => {
+  try {
+    const chunkString = chunk.toString().trim(); // ✅ Convert to string & trim spaces
+    console.log("🔹 RAW CHUNK RECEIVED:", chunkString);
+
+    // ✅ Append to buffer
+    buffer += chunkString;
+
+    // ✅ Split by "data: " occurrences
+    const jsonChunks = buffer.split(/data:\s*/).filter((s) => s.trim() !== ""); 
+
+    for (const jsonChunk of jsonChunks) {
       try {
-        const chunkString = chunk.toString().trim();
-        console.log("🔹 RAW CHUNK RECEIVED:", chunkString); // ✅ Debug log
+        if (!jsonChunk.startsWith("{") || !jsonChunk.endsWith("}")) {
+          console.warn("⚠️ Incomplete JSON, waiting for more data:", jsonChunk);
+          buffer = jsonChunk; // ✅ Keep only the last incomplete part
+          continue;
+        }
 
-        // ✅ Remove "data: " prefix safely
-        const jsonStr = chunkString.replace(/^data:\s*/, "").trim();
+        // ✅ Parse the fully formed JSON
+        const jsonData = JSON.parse(jsonChunk);
+        console.log("✅ Parsed JSON Data:", JSON.stringify(jsonData, null, 2));
 
-        // ✅ Parse JSON safely
-        const jsonData = JSON.parse(jsonStr);
-        console.log("🔹 Parsed JSON Data:", JSON.stringify(jsonData, null, 2));
-
-        // ✅ Extract and send Citations (Only from the first chunk)
+        // ✅ Send citations immediately on the first chunk
         if (isFirstChunk && jsonData.citations) {
           console.log("🔹 Sending Citations:", jsonData.citations);
           await apiGateway.send(new PostToConnectionCommand({
             ConnectionId: connectionId,
             Data: JSON.stringify({ citations: jsonData.citations }),
           }));
-          isFirstChunk = false; // Prevent resending citations
+          isFirstChunk = false; // Prevent resending
         }
 
-        // ✅ Extract `delta.content` for streamed response
+        // ✅ Extract and send delta content
         const text = jsonData.choices?.[0]?.delta?.content || "";
-        console.log("✅ ", text);
         if (text) {
+          console.log("✅ Sending Text:", text);
           await apiGateway.send(new PostToConnectionCommand({
             ConnectionId: connectionId,
             Data: JSON.stringify({ text }),
@@ -125,14 +135,23 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
 
         // ✅ Extract Token Usage from the Last Chunk
         if (jsonData.usage) {
+          console.log("🔹 Token Usage Found:", jsonData.usage);
           promptTokens = jsonData.usage.prompt_tokens;
           completionTokens = jsonData.usage.completion_tokens;
           totalTokens = jsonData.usage.total_tokens;
         }
-      } catch (error) {
-        console.error("⚠️ Error parsing SSE chunk:", error);
+
+        // ✅ Reset buffer when processed successfully
+        buffer = "";
+      } catch (parseError) {
+        console.warn("⚠️ Still waiting for complete JSON chunk...");
       }
-    });
+    }
+  } catch (error) {
+    console.error("❌ Error parsing SSE chunk:", error);
+  }
+});
+
 
     return new Promise((resolve) => {
       response.data.on("end", async () => {
