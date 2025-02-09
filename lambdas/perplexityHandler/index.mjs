@@ -85,28 +85,36 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
 
     // ✅ Process Streamed Data (Fixes JSON Parsing Issue)
     response.data.on("data", async (chunk) => {
-      if (timeoutTriggered || isCanceled) return;
-
-      try {
-        const chunkString = chunk.toString();
-        const jsonMatch = chunkString.match(/^data:\s*(\{.*\})/); // ✅ Extract JSON from "data: {...}"
-        if (!jsonMatch) return; // Skip invalid chunks
-
-        const jsonData = JSON.parse(jsonMatch[1]); // ✅ Now safely parse JSON
-
-        // ✅ Extract and send text response
-        const text = jsonData.choices?.[0]?.delta?.content || "";
-        if (text) {
-          await apiGateway.send(new PostToConnectionCommand({
-            ConnectionId: connectionId,
-            Data: JSON.stringify({ text }),
-          }));
-          fullResponse += text;
+        if (timeoutTriggered || isCanceled) return;
+      
+        try {
+          const chunkString = chunk.toString();
+          console.log("🔹 RAW CHUNK RECEIVED:", chunkString); // ✅ Debug log to see EXACTLY what is received
+      
+          // Check if the chunk follows SSE format (Starts with "data:")
+          const jsonMatch = chunkString.match(/^data:\s*(\{.*\})/);
+          if (!jsonMatch) {
+            console.warn("⚠️ Skipping invalid chunk:", chunkString); // Log anything that doesn't match
+            return;
+          }
+      
+          const jsonData = JSON.parse(jsonMatch[1]); // ✅ Now safely parse JSON
+          console.log("🔹 Parsed JSON Data:", JSON.stringify(jsonData, null, 2)); // ✅ Log structured JSON data
+      
+          // ✅ Extract and send text response
+          const text = jsonData.choices?.[0]?.delta?.content || "";
+          if (text) {
+            await apiGateway.send(new PostToConnectionCommand({
+              ConnectionId: connectionId,
+              Data: JSON.stringify({ text }),
+            }));
+            fullResponse += text;
+          }
+        } catch (error) {
+          console.error("⚠️ Error parsing SSE chunk:", error);
         }
-      } catch (error) {
-        console.error("⚠️ Error parsing SSE chunk:", error);
-      }
-    });
+      });
+      
 
     return new Promise((resolve) => {
       response.data.on("end", () => {
