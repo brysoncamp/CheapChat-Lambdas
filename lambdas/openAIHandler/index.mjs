@@ -111,6 +111,8 @@ export const handler = async (event) => {
     });
 
     console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${connectionId}`);
+    console.log(`🟢 OpenAI Model Used: ${response.model}`);
+
 
     let promptTokens = 0;
     let completionTokens = 0;
