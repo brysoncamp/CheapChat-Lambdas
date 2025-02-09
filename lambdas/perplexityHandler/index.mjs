@@ -33,26 +33,44 @@ const estimateTokens = (text) => {
 
 // Function to handle Perplexity API Request
 const fetchPerplexityResponse = async (messages) => {
-  const apiKey = await getPerplexityKey();
-  const response = await fetch("https://api.perplexity.ai/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "sonar", // Adjust model if needed
-      messages: messages,
-      stream: false, // Set to false to get the full response at once
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Perplexity API error: ${response.statusText}`);
-  }
-
-  return response.json(); // Parse the JSON response
-};
+    const apiKey = await getPerplexityKey();
+    
+    console.log("🔹 Fetching response from Perplexity...");
+    
+    try {
+      const response = await fetch("https://api.perplexity.ai/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "sonar",
+          messages: messages,
+          stream: false,
+        }),
+      });
+  
+      console.log(`🔹 API Response Status: ${response.status}`);
+  
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`❌ Perplexity API error: ${response.statusText} - ${errorBody}`);
+        throw new Error(`Perplexity API error: ${response.statusText}`);
+      }
+  
+      console.log("✅ Successfully received response from Perplexity");
+  
+      const jsonResponse = await response.json();
+      console.log("🔹 Perplexity Response JSON:", JSON.stringify(jsonResponse, null, 2));
+  
+      return jsonResponse;
+    } catch (error) {
+      console.error("❌ Error fetching response from Perplexity:", error);
+      throw error;
+    }
+  };
+  
 
 // Main Lambda Handler
 export const handler = async (event) => {
