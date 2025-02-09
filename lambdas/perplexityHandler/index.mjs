@@ -2,7 +2,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-sec
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import fetch from "node-fetch";
+import { request } from "undici"; // ✅ Using undici for streaming
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
@@ -31,13 +31,13 @@ const estimateTokens = (text) => {
   return Math.ceil(text.split(/\s+/).length * 1.3); // Rough estimation
 };
 
-// Function to handle Perplexity API Request
+// Function to handle Perplexity API Request (Using `undici`)
 const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
   const apiKey = await getPerplexityKey();
   console.log("🔹 Fetching streaming response from Perplexity...");
 
   try {
-    const response = await fetch("https://api.perplexity.ai/chat/completions", {
+    const { body } = await request("https://api.perplexity.ai/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -50,24 +50,11 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
       }),
     });
 
-    console.log(`🔹 API Response Status: ${response.status}`);
+    console.log("✅ Processing streaming response...");
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error(`❌ Perplexity API error: ${response.statusText} - ${errorBody}`);
-      throw new Error(`Perplexity API error: ${response.statusText}`);
-    }
+    const reader = body.pipeThrough(new TextDecoderStream()).getReader();
 
-    console.log("✅ Streaming response from Perplexity...");
-
-    // ✅ Read streaming response in chunks
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
     let fullResponse = "";
-    let promptTokens = 0;
-    let completionTokens = 0;
-    let totalTokens = 0;
-    let receivedUsage = false;
     let isCanceled = false;
     let timeoutTriggered = false;
 
@@ -96,26 +83,19 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
       timeoutTriggered = true;
     }, 60000);
 
-    // ✅ Process the streaming response
     while (true) {
       const { done, value } = await reader.read();
       if (done || timeoutTriggered || isCanceled) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      console.log("🔹 Received chunk:", chunk);
-
       try {
-        const chunkData = JSON.parse(chunk);
+        const chunkData = JSON.parse(value);
 
         // ✅ Extract token usage if available
         if (chunkData.usage) {
-          promptTokens = chunkData.usage.prompt_tokens;
-          completionTokens = chunkData.usage.completion_tokens;
-          totalTokens = chunkData.usage.total_tokens;
-          receivedUsage = true;
+          console.log("🔹 Token usage:", chunkData.usage);
         }
 
-        // ✅ Extract text response
+        // ✅ Extract text response and send it
         const text = chunkData.choices?.[0]?.delta?.content || "";
         if (text) {
           await apiGateway.send(new PostToConnectionCommand({
@@ -129,24 +109,10 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
       }
     }
 
-    // ✅ Cleanup
+    console.log("✅ Finished streaming response.");
     clearTimeout(timeout);
 
-    // ✅ If request wasn't canceled, send "done"
-    if (!timeoutTriggered && !isCanceled) {
-      await apiGateway.send(new PostToConnectionCommand({
-        ConnectionId: connectionId,
-        Data: JSON.stringify({ done: true }),
-      }));
-    }
-
-    return {
-      fullResponse,
-      promptTokens,
-      completionTokens,
-      totalTokens,
-      receivedUsage,
-    };
+    return { fullResponse };
   } catch (error) {
     console.error("❌ Error fetching streaming response from Perplexity:", error);
     throw error;
@@ -172,19 +138,19 @@ export const handler = async (event) => {
     const messages = [{ role: "user", content: message }];
 
     // ✅ Fetch Perplexity Streaming Response
-    const { fullResponse, promptTokens, completionTokens, totalTokens, receivedUsage } =
-      await fetchPerplexityResponse(messages, connectionId, sessionId);
+    const { fullResponse } = await fetchPerplexityResponse(messages, connectionId, sessionId);
 
-    clearTimeout(timeout);
+    // ✅ Send "done" signal after full response
+    await apiGateway.send(new PostToConnectionCommand({
+      ConnectionId: connectionId,
+      Data: JSON.stringify({ done: true }),
+    }));
 
     // ✅ Estimate Token Usage
     const promptTokensEstimate = estimateTokens(message);
     const completionTokensEstimate = estimateTokens(fullResponse);
 
     console.log(`🟢 Token Usage (Estimated): Prompt = ${promptTokensEstimate}, Completion = ${completionTokensEstimate}`);
-    if (receivedUsage) {
-      console.log(`🟢 Token Usage (Actual): Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`);
-    }
 
     console.log("✅ Response sent successfully");
     return { statusCode: 200, body: "Streaming response sent to client" };
