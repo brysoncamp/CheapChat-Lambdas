@@ -93,13 +93,13 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
 
       try {
         const chunkString = chunk.toString();
-        console.log("🔹 RAW CHUNK RECEIVED:", chunkString); // ✅ Debug log
+        //console.log("🔹 RAW CHUNK RECEIVED:", chunkString); // ✅ Debug log
 
         const jsonMatch = chunkString.match(/^data:\s*(\{.*\})/);
         if (!jsonMatch) return;
 
         const jsonData = JSON.parse(jsonMatch[1]); // ✅ Now safely parse JSON
-        console.log("🔹 Parsed JSON Data:", JSON.stringify(jsonData, null, 2));
+        //console.log("🔹 Parsed JSON Data:", JSON.stringify(jsonData, null, 2));
 
         // ✅ Extract and send Citations (Only from the first chunk)
         if (isFirstChunk && jsonData.citations) {
@@ -113,6 +113,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
 
         // ✅ Extract `delta.content` for streamed response
         const text = jsonData.choices?.[0]?.delta?.content || "";
+        console.log("✅ ", text);
         if (text) {
           await apiGateway.send(new PostToConnectionCommand({
             ConnectionId: connectionId,
