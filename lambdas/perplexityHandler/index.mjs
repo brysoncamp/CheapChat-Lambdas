@@ -2,7 +2,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-sec
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
-import axios from "axios"; // ✅ Single dependency for HTTP + streaming
+import axios from "axios"; // ✅ Keep Axios for compatibility
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
@@ -26,12 +26,7 @@ const getPerplexityKey = async () => {
   }
 };
 
-// Function to estimate token count
-const estimateTokens = (text) => {
-  return Math.ceil(text.split(/\s+/).length * 1.3); // Rough estimation
-};
-
-// ✅ Function to handle Perplexity API Request (Now Sends Citations Immediately & Tracks Token Usage)
+// ✅ Function to handle Perplexity API Request
 const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
   const apiKey = await getPerplexityKey();
   console.log("🔹 Fetching streaming response from Perplexity...");
@@ -49,127 +44,81 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
         messages: messages,
         stream: true, // ✅ Enable streaming
       },
-      responseType: "stream", // ✅ Ensures proper stream handling
+      responseType: "stream", // ✅ Ensure streaming response
     });
 
     console.log("✅ Processing streaming response...");
 
-    let fullResponse = "";
+    let buffer = ""; // ✅ Stores incomplete chunks
     let isFirstChunk = true;
-    let isCanceled = false;
-    let timeoutTriggered = false;
     let promptTokens = 0;
     let completionTokens = 0;
     let totalTokens = 0;
 
-    // ✅ Start checking for cancellation
-    const checkCancellation = async () => {
-      while (!isCanceled && !timeoutTriggered) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        try {
-          const checkResult = await dynamoDB.send(new GetCommand({
-            TableName: CONNECTIONS_TABLE,
-            Key: { sessionId },
-          }));
-          if (checkResult.Item?.canceled) {
-            isCanceled = true;
-          }
-        } catch (err) {
-          console.error(`❌ Error checking session cancellation: ${err.message}`);
-        }
-      }
-    };
-    checkCancellation();
-
-    // ✅ Start a timeout to prevent infinite waits
-    const timeout = setTimeout(() => {
-      console.log(`⚠️ Timeout reached for connection ${connectionId}`);
-      timeoutTriggered = true;
-    }, 60000);
-
-    let buffer = ""; // ✅ Store incomplete chunks
-
-response.data.on("data", async (chunk) => {
-  try {
-    const chunkString = chunk.toString().trim(); // ✅ Convert to string & trim spaces
-    console.log("🔹 RAW CHUNK RECEIVED:", chunkString);
-
-    // ✅ Append to buffer
-    buffer += chunkString;
-
-    // ✅ Split by "data: " occurrences
-    const jsonChunks = buffer.split(/data:\s*/).filter((s) => s.trim() !== ""); 
-
-    for (const jsonChunk of jsonChunks) {
+    // ✅ Read stream and handle proper chunking
+    response.data.on("data", async (chunk) => {
       try {
-        if (!jsonChunk.startsWith("{") || !jsonChunk.endsWith("}")) {
-          console.warn("⚠️ Incomplete JSON, waiting for more data:", jsonChunk);
-          buffer = jsonChunk; // ✅ Keep only the last incomplete part
-          continue;
+        const chunkString = chunk.toString(); // ✅ Convert chunk to string
+        buffer += chunkString; // ✅ Append to buffer
+        console.log("🔹 RAW CHUNK RECEIVED:", chunkString);
+
+        // ✅ Process all complete JSON objects in buffer
+        const jsonChunks = buffer.split("\n").filter((line) => line.startsWith("data: "));
+        buffer = buffer.endsWith("}") ? "" : buffer; // ✅ Retain last partial chunk
+
+        for (const jsonChunk of jsonChunks) {
+          const jsonString = jsonChunk.replace(/^data:\s*/, ""); // Remove "data: "
+          try {
+            const jsonData = JSON.parse(jsonString);
+            console.log("✅ Parsed JSON Data:", JSON.stringify(jsonData, null, 2));
+
+            // ✅ Send citations immediately on first chunk
+            if (isFirstChunk && jsonData.citations) {
+              console.log("🔹 Sending Citations:", jsonData.citations);
+              await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({ citations: jsonData.citations }),
+              }));
+              isFirstChunk = false; // Prevent resending
+            }
+
+            // ✅ Extract and send `delta.content` for streamed response
+            const text = jsonData.choices?.[0]?.delta?.content || "";
+            if (text) {
+              console.log("✅ Sending Text:", text);
+              await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({ text }),
+              }));
+            }
+
+            // ✅ Extract Token Usage from last chunk
+            if (jsonData.usage) {
+              console.log("🔹 Token Usage Found:", jsonData.usage);
+              promptTokens = jsonData.usage.prompt_tokens;
+              completionTokens = jsonData.usage.completion_tokens;
+              totalTokens = jsonData.usage.total_tokens;
+            }
+          } catch (parseError) {
+            console.warn("⚠️ JSON Parsing Error, skipping:", jsonChunk);
+          }
         }
-
-        // ✅ Parse the fully formed JSON
-        const jsonData = JSON.parse(jsonChunk);
-        console.log("✅ Parsed JSON Data:", JSON.stringify(jsonData, null, 2));
-
-        // ✅ Send citations immediately on the first chunk
-        if (isFirstChunk && jsonData.citations) {
-          console.log("🔹 Sending Citations:", jsonData.citations);
-          await apiGateway.send(new PostToConnectionCommand({
-            ConnectionId: connectionId,
-            Data: JSON.stringify({ citations: jsonData.citations }),
-          }));
-          isFirstChunk = false; // Prevent resending
-        }
-
-        // ✅ Extract and send delta content
-        const text = jsonData.choices?.[0]?.delta?.content || "";
-        if (text) {
-          console.log("✅ Sending Text:", text);
-          await apiGateway.send(new PostToConnectionCommand({
-            ConnectionId: connectionId,
-            Data: JSON.stringify({ text }),
-          }));
-          fullResponse += text;
-        }
-
-        // ✅ Extract Token Usage from the Last Chunk
-        if (jsonData.usage) {
-          console.log("🔹 Token Usage Found:", jsonData.usage);
-          promptTokens = jsonData.usage.prompt_tokens;
-          completionTokens = jsonData.usage.completion_tokens;
-          totalTokens = jsonData.usage.total_tokens;
-        }
-
-        // ✅ Reset buffer when processed successfully
-        buffer = "";
-      } catch (parseError) {
-        console.warn("⚠️ Still waiting for complete JSON chunk...");
+      } catch (error) {
+        console.error("❌ Error processing chunk:", error);
       }
-    }
-  } catch (error) {
-    console.error("❌ Error parsing SSE chunk:", error);
-  }
-});
-
+    });
 
     return new Promise((resolve) => {
       response.data.on("end", async () => {
-        clearTimeout(timeout);
         console.log("✅ Finished streaming response.");
+        console.log(`🟢 Token Usage: Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`);
 
-        // ✅ Send final token usage summary
-        console.log(
-          `🟢 Token Usage: Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`
-        );
         await apiGateway.send(new PostToConnectionCommand({
           ConnectionId: connectionId,
-          Data: JSON.stringify({
-            token_usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: totalTokens },
-          }),
+          Data: JSON.stringify({ token_usage: { promptTokens, completionTokens, totalTokens } }),
         }));
 
-        resolve({ fullResponse });
+        resolve();
       });
     });
   } catch (error) {
@@ -192,24 +141,16 @@ export const handler = async (event) => {
 
   try {
     console.log(`Sending message to Perplexity: ${message}`);
-
-    // ✅ Prepare messages
     const messages = [{ role: "user", content: message }];
 
     // ✅ Fetch Perplexity Streaming Response
-    const { fullResponse } = await fetchPerplexityResponse(messages, connectionId, sessionId);
+    await fetchPerplexityResponse(messages, connectionId, sessionId);
 
     // ✅ Send "done" signal after full response
     await apiGateway.send(new PostToConnectionCommand({
       ConnectionId: connectionId,
       Data: JSON.stringify({ done: true }),
     }));
-
-    // ✅ Estimate Token Usage
-    const promptTokensEstimate = estimateTokens(message);
-    const completionTokensEstimate = estimateTokens(fullResponse);
-
-    console.log(`🟢 Token Usage (Estimated): Prompt = ${promptTokensEstimate}, Completion = ${completionTokensEstimate}`);
 
     console.log("✅ Response sent successfully");
     return { statusCode: 200, body: "Streaming response sent to client" };
