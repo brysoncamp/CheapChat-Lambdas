@@ -42,7 +42,7 @@ export const handler = async (event) => {
     console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);
 
     await apiGateway.send(new PostToConnectionCommand({
-      ConnectionI: connectionId, // ✅ Correct placement
+      ConnectionId: connectionId, // ✅ Correct placement
       Data: JSON.stringify({ conversationId: conversationId }) // ✅ Send only conversationId inside Data
     }));
 
