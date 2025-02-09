@@ -99,7 +99,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
         if (!jsonMatch) return;
 
         const jsonData = JSON.parse(jsonMatch[1]); // ✅ Now safely parse JSON
-        //console.log("🔹 Parsed JSON Data:", JSON.stringify(jsonData, null, 2));
+        console.log("🔹 Parsed JSON Data:", JSON.stringify(jsonData, null, 2));
 
         // ✅ Extract and send Citations (Only from the first chunk)
         if (isFirstChunk && jsonData.citations) {
