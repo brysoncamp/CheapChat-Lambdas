@@ -90,10 +90,10 @@ const processMessage = (message, connectionId) => {
     const cleanMessage = message.replace(/^data: /, '').trim();
     if (cleanMessage) {
       const data = JSON.parse(cleanMessage);
-      console.log('Data processed:', data);
+      //console.log('Data processed:', data);
 
       if (data.choices && data.choices.length > 0) {
-        const deltaContent = data.choices[0].delta;
+        const deltaContent = data.choices[0].delta.content;
         console.log('Delta Content:', deltaContent);
         apiGateway.send(new PostToConnectionCommand({
           ConnectionId: connectionId,
