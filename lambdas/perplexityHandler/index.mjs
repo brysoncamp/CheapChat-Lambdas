@@ -52,10 +52,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
                             if (data.choices && data.choices.length > 0) {
                                 const deltaContent = data.choices[0].delta.content;
                                 if (deltaContent) {
-                                    await apiGateway.send(new PostToConnectionCommand({
-                                        ConnectionId: connectionId,
-                                        Data: JSON.stringify({ text: deltaContent }),
-                                    }));
+                                    console.log(deltaContent);
                                 }
                             }
                         } catch (error) {
