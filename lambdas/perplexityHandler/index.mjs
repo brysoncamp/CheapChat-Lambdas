@@ -96,6 +96,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
 
 
 let messageQueue = {}; // Stores the latest message for each connectionId
+let citationQueue = {}; // Stores citations for each connectionId (only once)
 let sendTimers = {}; // Keeps track of timeouts for each connectionId
 let sentCitations = {}; // Track whether citations have been sent for a connection
 
@@ -113,34 +114,30 @@ const processMessage = async (message, connectionId) => {
                 console.log('Delta Content:', deltaContent);
 
                 const finished = data.choices[0]?.finish_reason === "stop";
-                const citations = data.citations || [];
+                const citations = data.choices[0]?.message?.citations || [];
 
-                // Send citations first if they exist and haven't been sent yet
+                // Store citations **only if they haven’t been sent before**
                 if (citations.length > 0 && !sentCitations[connectionId]) {
-                    console.log("Sending citations first...");
-                    await apiGateway.send(new PostToConnectionCommand({
-                        ConnectionId: connectionId,
-                        Data: JSON.stringify({ citations }),
-                    }));
-                    sentCitations[connectionId] = true;
+                    citationQueue[connectionId] = citations;
+                    sentCitations[connectionId] = true; // Prevent duplicate sending
                 }
 
                 if (deltaContent) {
                     // Store the latest message in the queue
                     messageQueue[connectionId] = deltaContent;
+                }
 
-                    // If a timer does not exist, start one
-                    if (!sendTimers[connectionId]) {
-                        sendTimers[connectionId] = setTimeout(async () => {
-                            await sendLatestMessage(connectionId);
-                        }, 50); // Small delay to batch updates
-                    }
+                // If a timer does not exist, start one
+                if (!sendTimers[connectionId]) {
+                    sendTimers[connectionId] = setTimeout(async () => {
+                        await sendLatestMessage(connectionId);
+                    }, 50); // Small delay to batch updates
                 }
 
                 if (finished) {
                     console.log('Finished processing message:', message);
 
-                    if (messageQueue[connectionId]) {
+                    if (messageQueue[connectionId] || citationQueue[connectionId]) {
                         console.log(`Waiting for last message to send before "done" for ${connectionId}...`);
                         await sendLatestMessage(connectionId); // Ensure last queued message is sent
                     }
@@ -155,8 +152,9 @@ const processMessage = async (message, connectionId) => {
 
                     // Cleanup connection's message queue and timer
                     delete messageQueue[connectionId];
+                    delete citationQueue[connectionId];
                     delete sendTimers[connectionId];
-                    delete sentCitations[connectionId]; // Reset citations for next message stream
+                    delete sentCitations[connectionId]; // Reset citations for the next session
                 }
             }
         }
@@ -165,24 +163,35 @@ const processMessage = async (message, connectionId) => {
     }
 };
 
-// Function to send the latest queued message
+// Function to send the latest queued message (including citations first)
 const sendLatestMessage = async (connectionId) => {
-    if (messageQueue[connectionId]) {
-        try {
+    try {
+        // Send citations **only if they exist and haven’t been sent yet**
+        if (citationQueue[connectionId]) {
+            await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({ citations: citationQueue[connectionId] }),
+            }));
+            console.log(`Sent citations to ${connectionId}:`, citationQueue[connectionId]);
+            delete citationQueue[connectionId]; // Ensure they are only sent once
+        }
+
+        // Send the latest message
+        if (messageQueue[connectionId]) {
             await apiGateway.send(new PostToConnectionCommand({
                 ConnectionId: connectionId,
                 Data: JSON.stringify({ message: messageQueue[connectionId] }),
             }));
             console.log(`Sent message to ${connectionId}:`, messageQueue[connectionId]);
-        } catch (error) {
-            console.error(`Error sending message to ${connectionId}:`, error);
+            delete messageQueue[connectionId];
         }
-        
-        // Cleanup
-        delete messageQueue[connectionId];
-        delete sendTimers[connectionId];
+
+        delete sendTimers[connectionId]; // Cleanup timer reference
+    } catch (error) {
+        console.error(`Error sending message to ${connectionId}:`, error);
     }
 };
+
 
 
   
