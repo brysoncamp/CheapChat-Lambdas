@@ -108,21 +108,40 @@ const processMessage = async (message, connectionId) => {
             console.log('Data processed:', data);
 
             if (data.choices && data.choices.length > 0) {
-                const deltaContent = data.choices[0].message?.content || "";
+                const deltaContent = data.choices[0].message.content;
                 console.log('Delta Content:', deltaContent);
 
                 const finished = data.choices[0]?.finish_reason === "stop";
 
                 if (deltaContent) {
                     // Store the latest message in the queue
-                    messageQueue[connectionId] = { message: deltaContent, finished };
+                    messageQueue[connectionId] = deltaContent;
 
                     // If a timer does not exist, start one
                     if (!sendTimers[connectionId]) {
                         sendTimers[connectionId] = setTimeout(async () => {
                             await sendLatestMessage(connectionId);
-                        }, 100); // 100ms rate limit
+                        }, 50); // 100ms rate limit
                     }
+                }
+
+                if (finished) {
+                    console.log('Finished processing message:', message);
+                    console.log("DATA USAGE", data.usage);
+
+
+                    setTimeout(async () => {
+                        await apiGateway.send(new PostToConnectionCommand({
+                            ConnectionId: connectionId,
+                            Data: JSON.stringify({ done: true }),
+                        }));    
+                    }, 50); // 100ms rate li
+
+                    
+                    // Cleanup connection's message queue and timer
+                    delete messageQueue[connectionId];
+                    delete sendTimers[connectionId];
+
                 }
             }
         }
@@ -131,31 +150,22 @@ const processMessage = async (message, connectionId) => {
     }
 };
 
-// Function to send the latest queued message, including "done" if it's the last one
+// Function to send the latest queued message
 const sendLatestMessage = async (connectionId) => {
     if (messageQueue[connectionId]) {
         try {
-            const { message, finished } = messageQueue[connectionId];
-
-            const responsePayload = finished
-                ? { message, done: true }  // Include "done: true" if it's the last message
-                : { message };
-
             await apiGateway.send(new PostToConnectionCommand({
                 ConnectionId: connectionId,
-                Data: JSON.stringify(responsePayload),
+                Data: JSON.stringify({ message: messageQueue[connectionId] }),
             }));
-
-            console.log(`Sent message to ${connectionId}:`, responsePayload);
-
-            // Cleanup if it's the final message
-            if (finished) {
-                delete messageQueue[connectionId];
-                delete sendTimers[connectionId];
-            }
+            console.log(`Sent message to ${connectionId}:`, messageQueue[connectionId]);
         } catch (error) {
             console.error(`Error sending message to ${connectionId}:`, error);
         }
+        
+        // Cleanup
+        delete messageQueue[connectionId];
+        delete sendTimers[connectionId];
     }
 };
 
