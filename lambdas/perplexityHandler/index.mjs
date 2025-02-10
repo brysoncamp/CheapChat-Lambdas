@@ -97,6 +97,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
 
 let messageQueue = {}; // Stores the latest message for each connectionId
 let sendTimers = {}; // Keeps track of timeouts for each connectionId
+let sentCitations = {}; // Track whether citations have been sent for a connection
 
 const processMessage = async (message, connectionId) => {
     console.log('Processing message:', message);
@@ -112,6 +113,17 @@ const processMessage = async (message, connectionId) => {
                 console.log('Delta Content:', deltaContent);
 
                 const finished = data.choices[0]?.finish_reason === "stop";
+                const citations = data.citations || [];
+
+                // Send citations first if they exist and haven't been sent yet
+                if (citations.length > 0 && !sentCitations[connectionId]) {
+                    console.log("Sending citations first...");
+                    await apiGateway.send(new PostToConnectionCommand({
+                        ConnectionId: connectionId,
+                        Data: JSON.stringify({ citations }),
+                    }));
+                    sentCitations[connectionId] = true;
+                }
 
                 if (deltaContent) {
                     // Store the latest message in the queue
@@ -121,13 +133,12 @@ const processMessage = async (message, connectionId) => {
                     if (!sendTimers[connectionId]) {
                         sendTimers[connectionId] = setTimeout(async () => {
                             await sendLatestMessage(connectionId);
-                        }, 50); // 100ms rate limit
+                        }, 50); // Small delay to batch updates
                     }
                 }
 
                 if (finished) {
                     console.log('Finished processing message:', message);
-                    console.log("DATA USAGE", data.usage);
 
                     if (messageQueue[connectionId]) {
                         console.log(`Waiting for last message to send before "done" for ${connectionId}...`);
@@ -139,13 +150,13 @@ const processMessage = async (message, connectionId) => {
                             ConnectionId: connectionId,
                             Data: JSON.stringify({ done: true }),
                         }));    
-                    }, 50); // 100ms rate li
+                        console.log("Done signal sent.");
+                    }, 100);
 
-                    
                     // Cleanup connection's message queue and timer
                     delete messageQueue[connectionId];
                     delete sendTimers[connectionId];
-
+                    delete sentCitations[connectionId]; // Reset citations for next message stream
                 }
             }
         }
@@ -172,6 +183,7 @@ const sendLatestMessage = async (connectionId) => {
         delete sendTimers[connectionId];
     }
 };
+
 
   
   
