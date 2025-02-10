@@ -111,6 +111,8 @@ const processMessage = async (message, connectionId) => {
                 const deltaContent = data.choices[0].message.content;
                 console.log('Delta Content:', deltaContent);
 
+                const finished = data.choices[0]?.finish_reason === "stop";
+
                 if (deltaContent) {
                     // Store the latest message in the queue
                     messageQueue[connectionId] = deltaContent;
@@ -119,8 +121,13 @@ const processMessage = async (message, connectionId) => {
                     if (!sendTimers[connectionId]) {
                         sendTimers[connectionId] = setTimeout(async () => {
                             await sendLatestMessage(connectionId);
-                        }, 500); // 500ms rate limit
+                        }, 100); // 100ms rate limit
                     }
+                }
+
+                if (finished) {
+                    console.log('Finished processing message:', message);
+                    console.log("DATA USAGE", data.usage);
                 }
             }
         }
