@@ -129,13 +129,17 @@ const processMessage = async (message, connectionId) => {
                     console.log('Finished processing message:', message);
                     console.log("DATA USAGE", data.usage);
 
+                    if (messageQueue[connectionId]) {
+                        console.log(`Waiting for last message to send before "done" for ${connectionId}...`);
+                        await sendLatestMessage(connectionId); // Ensure last queued message is sent
+                    }
 
                     setTimeout(async () => {
                         await apiGateway.send(new PostToConnectionCommand({
                             ConnectionId: connectionId,
                             Data: JSON.stringify({ done: true }),
                         }));    
-                    }, 100); // 100ms rate li
+                    }, 50); // 100ms rate li
 
                     
                     // Cleanup connection's message queue and timer
