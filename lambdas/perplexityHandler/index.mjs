@@ -11,8 +11,8 @@ const apiGateway = new ApiGatewayManagementApiClient({
 const dynamoDB = new DynamoDBClient({});
 const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
 
-// Track message queues per session
-const messageQueueMap = new Map();
+// Track the last sequence number per session
+const sessionSequenceMap = new Map();
 
 // Fetch Perplexity API Key (cached)
 let cachedApiKey = null;
@@ -30,33 +30,7 @@ const getPerplexityKey = async () => {
   }
 };
 
-// Queue handler to enforce sequential sending
-const enqueueMessage = async (connectionId, sessionId, message) => {
-  if (!messageQueueMap.has(sessionId)) {
-    messageQueueMap.set(sessionId, Promise.resolve());
-  }
-
-  // Chain each message send to the previous one to enforce order
-  messageQueueMap.set(
-    sessionId,
-    messageQueueMap.get(sessionId).then(async () => {
-      try {
-        await apiGateway.send(
-          new PostToConnectionCommand({
-            ConnectionId: connectionId,
-            Data: JSON.stringify(message),
-          })
-        );
-      } catch (error) {
-        console.error(`Error sending message for session ${sessionId}:`, error);
-      }
-    })
-  );
-
-  return messageQueueMap.get(sessionId);
-};
-
-// ✅ Fix: Store raw message chunks in a queue BEFORE assigning sequence numbers
+// ✅ Streaming Perplexity Response with Real-Time Ordering
 const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
   const apiKey = await getPerplexityKey();
   const postData = JSON.stringify({
@@ -78,7 +52,6 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
       let buffer = "";
-      let messageQueue = []; // Store raw messages before assigning sequence numbers
 
       res.on("data", async (chunk) => {
         buffer += chunk.toString();
@@ -90,28 +63,16 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
 
           for (const message of completeMessages.split("\n")) {
             if (message.trim()) {
-              messageQueue.push(message);
+              await processMessage(message, connectionId, sessionId);
             }
-          }
-
-          // ✅ Process messages sequentially only after they are fully queued
-          while (messageQueue.length > 0) {
-            let rawMessage = messageQueue.shift();
-            await processMessage(rawMessage, connectionId, sessionId);
           }
         }
       });
 
       res.on("end", async () => {
         if (buffer.trim().length > 0) {
-          messageQueue.push(buffer);
+          await processMessage(buffer, connectionId, sessionId);
         }
-
-        while (messageQueue.length > 0) {
-          let rawMessage = messageQueue.shift();
-          await processMessage(rawMessage, connectionId, sessionId);
-        }
-
         resolve();
       });
     });
@@ -126,9 +87,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
   });
 };
 
-// ✅ Assign sequence numbers *only after* messages are correctly ordered
-let sessionSequenceMap = new Map();
-
+// ✅ Assign sequence numbers dynamically in real-time
 const processMessage = async (message, connectionId, sessionId) => {
   console.log(`Processing message [Session: ${sessionId}]:`, message);
   try {
@@ -147,11 +106,16 @@ const processMessage = async (message, connectionId, sessionId) => {
       if (data.choices && data.choices.length > 0) {
         const deltaContent = data.choices[0].delta?.content || "";
         if (deltaContent) {
-          await enqueueMessage(connectionId, sessionId, {
-            text: deltaContent,
-            seq: sequence,
-            sessionId,
-          });
+          await apiGateway.send(
+            new PostToConnectionCommand({
+              ConnectionId: connectionId,
+              Data: JSON.stringify({
+                text: deltaContent,
+                seq: sequence, // ✅ Sequence assigned dynamically while streaming
+                sessionId,
+              }),
+            })
+          );
         }
       }
     }
@@ -160,7 +124,7 @@ const processMessage = async (message, connectionId, sessionId) => {
   }
 };
 
-// Main Lambda Handler
+// ✅ Main Lambda Handler
 export const handler = async (event) => {
   console.log("Perplexity Handler Event:", JSON.stringify(event, null, 2));
 
@@ -176,11 +140,16 @@ export const handler = async (event) => {
     console.log(`Sending message to Perplexity: ${message}`);
     const messages = [{ role: "user", content: message }];
 
-    // Fetch Perplexity Streaming Response
+    // ✅ Start streaming in real-time while ensuring order
     await fetchPerplexityResponse(messages, connectionId, sessionId);
 
-    // Send "done" signal after full response
-    await enqueueMessage(connectionId, sessionId, { done: true });
+    // ✅ Send "done" signal after full response
+    await apiGateway.send(
+      new PostToConnectionCommand({
+        ConnectionId: connectionId,
+        Data: JSON.stringify({ done: true }),
+      })
+    );
 
     console.log("Response sent successfully");
     return { statusCode: 200, body: "Streaming response sent to client" };
