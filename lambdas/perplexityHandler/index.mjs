@@ -86,10 +86,12 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
     });
   };
   
+  
 
 // Helper function to process each message
 // Helper function to process each message
-const processMessage = (message, connectionId) => {
+// Helper function to process each message
+const processMessage = async (message, connectionId) => {  // Added async here
     console.log('Processing message:', message);
     try {
       const cleanMessage = message.replace(/^data: /, '').trim();
@@ -100,7 +102,7 @@ const processMessage = (message, connectionId) => {
         // Handle first data
         if (isFirstData && data.citations) {
           console.log('First Data Citations:', data.citations);
-          apiGateway.send(new PostToConnectionCommand({
+          await apiGateway.send(new PostToConnectionCommand({  // Added await here
             ConnectionId: connectionId,
             Data: JSON.stringify({ citations: data.citations }),
           }));
@@ -114,7 +116,7 @@ const processMessage = (message, connectionId) => {
   
           // Send delta content if not empty
           if (deltaContent) {
-            apiGateway.send(new PostToConnectionCommand({
+            await apiGateway.send(new PostToConnectionCommand({  // Added await here
               ConnectionId: connectionId,
               Data: JSON.stringify({ text: deltaContent }),
             }));
@@ -132,7 +134,7 @@ const processMessage = (message, connectionId) => {
               console.log('Usage Data:', data.usage);
             }
             // Optionally, send a completion or any final message to the client
-            apiGateway.send(new PostToConnectionCommand({
+            await apiGateway.send(new PostToConnectionCommand({  // Added await here
               ConnectionId: connectionId,
               Data: JSON.stringify({ done: true }),
             }));
@@ -143,6 +145,7 @@ const processMessage = (message, connectionId) => {
       console.error('Error processing message:', error);
     }
   };
+
   
   
 // Main Lambda Handler
