@@ -32,7 +32,7 @@ let isFirstData = true; // Flag to track if the current data is the first one pr
 const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
     const apiKey = await getPerplexityKey();
     const postData = JSON.stringify({
-      model: "sonar",
+      model: "sonar-pro",
       messages: messages,
       stream: true,
     });
