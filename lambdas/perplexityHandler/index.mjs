@@ -121,7 +121,7 @@ const processMessage = async (message, connectionId) => {
                     if (!sendTimers[connectionId]) {
                         sendTimers[connectionId] = setTimeout(async () => {
                             await sendLatestMessage(connectionId);
-                        }, 50); // 100ms rate limit
+                        }, 100); // 100ms rate limit
                     }
                 }
             }
