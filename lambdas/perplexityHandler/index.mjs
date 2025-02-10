@@ -24,10 +24,11 @@ const getPerplexityKey = async () => {
     throw new Error("Failed to retrieve Perplexity API Key");
   }
 };
+// Function to handle Perplexity API Request using native https module
 
-// Track sequence numbers per session
-const sessionSequenceMap = new Map();  // Stores the last sequence number per session
+let isFirstData = true; // Flag to track if the current data is the first one processed
 
+// Function to handle Perplexity API Request using native https module
 const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
     const apiKey = await getPerplexityKey();
     const postData = JSON.stringify({
@@ -35,7 +36,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
       messages: messages,
       stream: true,
     });
-
+  
     const options = {
       hostname: 'api.perplexity.ai',
       path: '/chat/completions',
@@ -45,12 +46,11 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
         'Authorization': `Bearer ${apiKey}`
       }
     };
-
+  
     return new Promise((resolve, reject) => {
       const req = https.request(options, (res) => {
         let buffer = '';
-        let sequence = 0;
-
+  
         res.on('data', (chunk) => {
           buffer += chunk.toString();
           let boundary = buffer.lastIndexOf('\n');
@@ -58,69 +58,97 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
             let completeMessages = buffer.slice(0, boundary);
             buffer = buffer.slice(boundary + 1);
             completeMessages.split('\n').forEach(message => {
-              if (message.trim()) {
-                sequence++;  // Increment sequence for each message
-                processMessage(message, connectionId, sessionId, sequence);
-              }
+              if (message.trim()) processMessage(message, connectionId);
             });
           }
         });
-
+  
         res.on('end', () => {
+          // Check if there's any remaining data in the buffer to process as potentially the last data
           if (buffer.trim().length > 0) {
-            sequence++;
-            processMessage(buffer, connectionId, sessionId, sequence);
+            processMessage(buffer, connectionId);
+          } else {
+            // If no data is left, but the stream has ended, assume the last processed message was the final one
+            console.log('Stream ended without final data. Assume last processed message was final.');
           }
           resolve();
         });
       });
-
+  
       req.on('error', (e) => {
         console.error(`Problem with request: ${e.message}`);
         reject(e);
       });
-
+  
+      // Write data to request body
       req.write(postData);
       req.end();
     });
-};
+  };
+  
+  
 
-const processMessage = async (message, connectionId, sessionId, sequence) => {
-    console.log(`Processing message [Session: ${sessionId}, Seq: ${sequence}]:`, message);
+// Helper function to process each message
+// Helper function to process each message
+// Helper function to process each message
+const processMessage = async (message, connectionId) => {  // Added async here
+    console.log('Processing message:', message);
     try {
-        const cleanMessage = message.replace(/^data: /, '').trim();
-        if (cleanMessage) {
-            const data = JSON.parse(cleanMessage);
-            console.log('Data processed:', data);
-
-            if (!sessionMessageQueues.has(sessionId)) {
-                sessionMessageQueues.set(sessionId, []);
-            }
-
-            const queue = sessionMessageQueues.get(sessionId);
-            queue.push({ sequence, data });
-
-            queue.sort((a, b) => a.sequence - b.sequence); // Ensure the queue remains ordered
-
-            while (queue.length > 0) {
-                const { sequence, data } = queue.shift(); // Get the next message in order
-
-                if (data.choices && data.choices.length > 0) {
-                    const deltaContent = data.choices[0].delta.content;
-                    if (deltaContent) {
-                        await apiGateway.send(new PostToConnectionCommand({
-                            ConnectionId: connectionId,
-                            Data: JSON.stringify({ text: deltaContent, seq: sequence, sessionId }),
-                        }));
-                    }
-                }
-            }
+      const cleanMessage = message.replace(/^data: /, '').trim();
+      if (cleanMessage) {
+        const data = JSON.parse(cleanMessage);
+        console.log('Data processed:', data);
+  
+        // Handle first data
+        if (isFirstData && data.citations) {
+          console.log('First Data Citations:', data.citations);
+          await apiGateway.send(new PostToConnectionCommand({  // Added await here
+            ConnectionId: connectionId,
+            Data: JSON.stringify({ citations: data.citations }),
+          }));
+          isFirstData = false; // Update flag after first data
         }
+  
+        // Always handle delta
+        if (data.choices && data.choices.length > 0) {
+          const deltaContent = data.choices[0].message.content;
+          console.log('Delta Content:', deltaContent);
+  
+          // Send delta content if not empty
+          if (deltaContent) {
+            await apiGateway.send(new PostToConnectionCommand({  // Added await here
+              ConnectionId: connectionId,
+              Data: JSON.stringify({ message: deltaContent }),
+            }));
+          }
+  
+          // If delta content is empty, assume it's the last message
+          if (!deltaContent) {
+            console.log('Assuming this is the last message due to empty delta content.');
+            // Handle message if available
+            if (data.choices[0].message) {
+              console.log('Last Data Message:', data.choices[0].message);
+            }
+            // Handle usage data
+            if (data.usage) {
+              console.log('Usage Data:', data.usage);
+            }
+            // Optionally, send a completion or any final message to the client
+            await apiGateway.send(new PostToConnectionCommand({  // Added await here
+              ConnectionId: connectionId,
+              Data: JSON.stringify({ done: true }),
+            }));
+          }
+        }
+      }
     } catch (error) {
-        console.error('Error processing message:', error);
+      console.error('Error processing message:', error);
     }
-};
+  };
 
+  
+  
+// Main Lambda Handler
 export const handler = async (event) => {
   console.log("Perplexity Handler Event:", JSON.stringify(event, null, 2));
 
