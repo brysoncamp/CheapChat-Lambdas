@@ -93,18 +93,26 @@ const processMessage = async (message, connectionId, sessionId, sequence) => {
             const data = JSON.parse(cleanMessage);
             console.log('Data processed:', data);
 
-            // Store last sent sequence for this session
-            sessionSequenceMap.set(sessionId, sequence);
+            if (!sessionMessageQueues.has(sessionId)) {
+                sessionMessageQueues.set(sessionId, []);
+            }
 
-            if (data.choices && data.choices.length > 0) {
-                const deltaContent = data.choices[0].delta.content;
-                console.log('Delta Content:', deltaContent);
+            const queue = sessionMessageQueues.get(sessionId);
+            queue.push({ sequence, data });
 
-                if (deltaContent) {
-                    await apiGateway.send(new PostToConnectionCommand({
-                        ConnectionId: connectionId,
-                        Data: JSON.stringify({ text: deltaContent, seq: sequence, sessionId }),
-                    }));
+            queue.sort((a, b) => a.sequence - b.sequence); // Ensure the queue remains ordered
+
+            while (queue.length > 0) {
+                const { sequence, data } = queue.shift(); // Get the next message in order
+
+                if (data.choices && data.choices.length > 0) {
+                    const deltaContent = data.choices[0].delta.content;
+                    if (deltaContent) {
+                        await apiGateway.send(new PostToConnectionCommand({
+                            ConnectionId: connectionId,
+                            Data: JSON.stringify({ text: deltaContent, seq: sequence, sessionId }),
+                        }));
+                    }
                 }
             }
         }
