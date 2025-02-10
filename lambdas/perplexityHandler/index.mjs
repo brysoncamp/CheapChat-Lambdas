@@ -135,7 +135,7 @@ const processMessage = async (message, connectionId) => {
                             ConnectionId: connectionId,
                             Data: JSON.stringify({ done: true }),
                         }));    
-                    }, 50); // 100ms rate li
+                    }, 100); // 100ms rate li
 
                     
                     // Cleanup connection's message queue and timer
