@@ -63,7 +63,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
           }
         });
   
-        res.on('end', () => {
+        res.on('end', async () => {
           // Check if there's any remaining data in the buffer to process as potentially the last data
           if (buffer.trim().length > 0) {
             processMessage(buffer, connectionId);
@@ -71,7 +71,8 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
             // If no data is left, but the stream has ended, assume the last processed message was the final one
             console.log('Stream ended without final data. Assume last processed message was final.');
           }
-          resolve();
+
+          await new Promise(resolve => setTimeout(resolve, 100));
         });
       });
   
