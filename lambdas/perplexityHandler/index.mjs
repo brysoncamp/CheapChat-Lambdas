@@ -24,74 +24,77 @@ const getPerplexityKey = async () => {
     throw new Error("Failed to retrieve Perplexity API Key");
   }
 };
-
 // Function to handle Perplexity API Request using native https module
 const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
-  const apiKey = await getPerplexityKey();
-  const postData = JSON.stringify({
-    model: "sonar",
-    messages: messages,
-    stream: true,
-  });
-
-  const options = {
-    hostname: 'api.perplexity.ai',
-    path: '/chat/completions',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
+    const apiKey = await getPerplexityKey();
+    const postData = JSON.stringify({
+      model: "sonar",
+      messages: messages,
+      stream: true,
+    });
+  
+    const options = {
+      hostname: 'api.perplexity.ai',
+      path: '/chat/completions',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      }
+    };
+  
+    return new Promise((resolve, reject) => {
+      const req = https.request(options, (res) => {
+        let buffer = '';
+  
+        res.on('data', (chunk) => {
+          buffer += chunk.toString();
+          let boundary = buffer.lastIndexOf('\n');
+          if (boundary !== -1) {
+            let completeMessages = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 1);
+            completeMessages.split('\n').forEach(message => {
+              if (message.trim()) processMessage(message, connectionId);
+            });
+          }
+        });
+  
+        res.on('end', () => {
+          if (buffer.trim().length > 0) {
+            processMessage(buffer, connectionId); // Process any remaining data
+          }
+          console.log('Stream ended');
+          resolve();
+        });
+      });
+  
+      req.on('error', (e) => {
+        console.error(`Problem with request: ${e.message}`);
+        reject(e);
+      });
+  
+      // Write data to request body
+      req.write(postData);
+      req.end();
+    });
+  };
+  
+  // Helper function to process each message
+  const processMessage = (message, connectionId) => {
+    console.log('Processing message:', message);
+    try {
+      // Check and strip "data:" prefix
+      const cleanMessage = message.replace(/^data: /, '').trim();
+      if (cleanMessage) {
+        const data = JSON.parse(cleanMessage);
+        // Handle the data
+        console.log('Data processed:', data);
+      }
+    } catch (error) {
+      console.error('Error processing message:', error);
     }
   };
-
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let buffer = '';
-
-      res.on('data', (chunk) => {
-        buffer += chunk.toString(); // Append the stringified chunk to buffer
-        let boundary = buffer.lastIndexOf('\n');
-        if (boundary !== -1) {
-          let completeMessages = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 1); // Keep the remainder in buffer
-          completeMessages.split('\n').forEach(message => {
-            if (message) processMessage(message, connectionId);
-          });
-        }
-      });
-
-      res.on('end', () => {
-        if (buffer.length > 0) {
-          processMessage(buffer, connectionId); // Process any remaining data
-        }
-        console.log('Stream ended');
-        resolve();
-      });
-    });
-
-    req.on('error', (e) => {
-      console.error(`problem with request: ${e.message}`);
-      reject(e);
-    });
-
-    // write data to request body
-    req.write(postData);
-    req.end();
-  });
-};
-
-// Helper function to process each message
-const processMessage = (message, connectionId) => {
-  console.log('Processing message:', message);
-  try {
-    const data = JSON.parse(message);
-    console.log('Message data:', data);
-    // Handle the data
-  } catch (error) {
-    console.error('Error processing message:', error);
-  }
-};
-
+  
 // Main Lambda Handler
 export const handler = async (event) => {
   console.log("Perplexity Handler Event:", JSON.stringify(event, null, 2));
