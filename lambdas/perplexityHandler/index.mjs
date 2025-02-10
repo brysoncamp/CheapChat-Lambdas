@@ -92,33 +92,61 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
 // Helper function to process each message
 // Helper function to process each message
 // Helper function to process each message
-const processMessage = async (message, connectionId) => {  // Added async here
-    console.log('Processing message:', message);
-    try {
-      const cleanMessage = message.replace(/^data: /, '').trim();
-      if (cleanMessage) {
-        const data = JSON.parse(cleanMessage);
-        console.log('Data processed:', data);
 
-  
-        // Always handle delta
-        if (data.choices && data.choices.length > 0) {
-          const deltaContent = data.choices[0].message.content;
-          console.log('Delta Content:', deltaContent);
-  
-          // Send delta content if not empty
-          if (deltaContent) {
-            await apiGateway.send(new PostToConnectionCommand({  // Added await here
-              ConnectionId: connectionId,
-              Data: JSON.stringify({ message: deltaContent }),
-            }));
-          }
+
+
+let messageQueue = {}; // Stores the latest message for each connectionId
+let sendTimers = {}; // Keeps track of timeouts for each connectionId
+
+const processMessage = async (message, connectionId) => {
+    console.log('Processing message:', message);
+    
+    try {
+        const cleanMessage = message.replace(/^data: /, '').trim();
+        if (cleanMessage) {
+            const data = JSON.parse(cleanMessage);
+            console.log('Data processed:', data);
+
+            if (data.choices && data.choices.length > 0) {
+                const deltaContent = data.choices[0].message.content;
+                console.log('Delta Content:', deltaContent);
+
+                if (deltaContent) {
+                    // Store the latest message in the queue
+                    messageQueue[connectionId] = deltaContent;
+
+                    // If a timer does not exist, start one
+                    if (!sendTimers[connectionId]) {
+                        sendTimers[connectionId] = setTimeout(async () => {
+                            await sendLatestMessage(connectionId);
+                        }, 500); // 500ms rate limit
+                    }
+                }
+            }
         }
-      }
     } catch (error) {
-      console.error('Error processing message:', error);
+        console.error('Error processing message:', error);
     }
-  };
+};
+
+// Function to send the latest queued message
+const sendLatestMessage = async (connectionId) => {
+    if (messageQueue[connectionId]) {
+        try {
+            await apiGateway.send(new PostToConnectionCommand({
+                ConnectionId: connectionId,
+                Data: JSON.stringify({ message: messageQueue[connectionId] }),
+            }));
+            console.log(`Sent message to ${connectionId}:`, messageQueue[connectionId]);
+        } catch (error) {
+            console.error(`Error sending message to ${connectionId}:`, error);
+        }
+        
+        // Cleanup
+        delete messageQueue[connectionId];
+        delete sendTimers[connectionId];
+    }
+};
 
   
   
