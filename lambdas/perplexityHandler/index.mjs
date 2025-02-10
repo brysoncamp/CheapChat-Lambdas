@@ -25,62 +25,87 @@ const getPerplexityKey = async () => {
   }
 };
 // Function to handle Perplexity API Request using native https module
+
+let isFirstData = true; // Flag to track if the current data is the first one processed
+
+// Function to handle Perplexity API Request using native https module
 const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
-    const apiKey = await getPerplexityKey();
-    const postData = JSON.stringify({ model: "sonar", messages, stream: true });
+  const apiKey = await getPerplexityKey();
+  const postData = JSON.stringify({
+    model: "sonar",
+    messages: messages,
+    stream: true,
+  });
 
-    const options = {
-        hostname: 'api.perplexity.ai',
-        path: '/chat/completions',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }
-    };
+  const options = {
+    hostname: 'api.perplexity.ai',
+    path: '/chat/completions',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    }
+  };
 
-    return new Promise((resolve, reject) => {
-        const req = https.request(options, (res) => {
-            let buffer = '';
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let buffer = '';
 
-            const processQueue = async () => {
-                while (buffer.includes('\n')) {
-                    const index = buffer.indexOf('\n');
-                    const message = buffer.slice(0, index).trim();
-                    buffer = buffer.slice(index + 1);
-                    
-                    if (message) {
-                        try {
-                            const data = JSON.parse(message.replace(/^data: /, ''));
-                            if (data.choices && data.choices.length > 0) {
-                                const deltaContent = data.choices[0].delta.content;
-                                if (deltaContent) {
-                                    console.log(deltaContent);
-                                }
-                            }
-                        } catch (error) {
-                            console.error("❌ JSON Parsing Error:", error);
-                        }
-                    }
-                }
-            };
+      res.on('data', (chunk) => {
+        buffer += chunk.toString();
+        let boundary = buffer.lastIndexOf('\n');
+        if (boundary !== -1) {
+          let completeMessages = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 1);
+          completeMessages.split('\n').forEach(message => {
+            if (message.trim()) processMessage(message, connectionId);
+          });
+        }
+      });
 
-            res.on('data', async (chunk) => {
-                buffer += chunk.toString();
-                await processQueue();
-            });
-
-            res.on('end', async () => {
-                if (buffer.trim()) await processQueue();  // Process any remaining data
-                resolve();
-            });
-        });
-
-        req.on('error', reject);
-        req.write(postData);
-        req.end();
+      res.on('end', () => {
+        if (buffer.trim().length > 0) {
+          processMessage(buffer, connectionId); // Process any remaining data as last data
+        }
+        console.log('Stream ended');
+        resolve();
+      });
     });
+
+    req.on('error', (e) => {
+      console.error(`Problem with request: ${e.message}`);
+      reject(e);
+    });
+
+    // Write data to request body
+    req.write(postData);
+    req.end();
+  });
 };
 
+// Helper function to process each message
+const processMessage = (message, connectionId) => {
+  console.log('Processing message:', message);
+  try {
+    const cleanMessage = message.replace(/^data: /, '').trim();
+    if (cleanMessage) {
+      const data = JSON.parse(cleanMessage);
+      console.log('Data processed:', data);
 
-  
+      if (data.choices && data.choices.length > 0) {
+        const deltaContent = data.choices[0].delta;
+        console.log('Delta Content:', deltaContent);
+        apiGateway.send(new PostToConnectionCommand({
+          ConnectionId: connectionId,
+          Data: JSON.stringify({ delta: deltaContent }),
+        }));
+      }
+    }
+  } catch (error) {
+    console.error('Error processing message:', error);
+  }
+};
+
   
 // Main Lambda Handler
 export const handler = async (event) => {
