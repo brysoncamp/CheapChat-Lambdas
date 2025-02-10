@@ -95,10 +95,10 @@ const processMessage = (message, connectionId) => {
       if (data.choices && data.choices.length > 0) {
         const deltaContent = data.choices[0].delta.content;
         console.log('Delta Content:', deltaContent);
-        apiGateway.send(new PostToConnectionCommand({
+        /*apiGateway.send(new PostToConnectionCommand({
           ConnectionId: connectionId,
           Data: JSON.stringify({ delta: deltaContent }),
-        }));
+        }));*/
       }
     }
   } catch (error) {
