@@ -114,7 +114,7 @@ const processMessage = async (message, connectionId) => {
                 console.log('Delta Content:', deltaContent);
 
                 const finished = data.choices[0]?.finish_reason === "stop";
-                const citations = data.choices[0]?.message?.citations || [];
+                const citations = data.citations || [];
 
                 // Store citations **only if they haven’t been sent before**
                 if (citations.length > 0 && !sentCitations[connectionId]) {
