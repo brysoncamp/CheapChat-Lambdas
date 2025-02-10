@@ -25,75 +25,104 @@ const getPerplexityKey = async () => {
   }
 };
 // Function to handle Perplexity API Request using native https module
+
+let isFirstData = true; // Flag to track if the current data is the first one processed
+
+// Function to handle Perplexity API Request using native https module
 const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
-    const apiKey = await getPerplexityKey();
-    const postData = JSON.stringify({
-      model: "sonar",
-      messages: messages,
-      stream: true,
-    });
-  
-    const options = {
-      hostname: 'api.perplexity.ai',
-      path: '/chat/completions',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      }
-    };
-  
-    return new Promise((resolve, reject) => {
-      const req = https.request(options, (res) => {
-        let buffer = '';
-  
-        res.on('data', (chunk) => {
-          buffer += chunk.toString();
-          let boundary = buffer.lastIndexOf('\n');
-          if (boundary !== -1) {
-            let completeMessages = buffer.slice(0, boundary);
-            buffer = buffer.slice(boundary + 1);
-            completeMessages.split('\n').forEach(message => {
-              if (message.trim()) processMessage(message, connectionId);
-            });
-          }
-        });
-  
-        res.on('end', () => {
-          if (buffer.trim().length > 0) {
-            processMessage(buffer, connectionId); // Process any remaining data
-          }
-          console.log('Stream ended');
-          resolve();
-        });
-      });
-  
-      req.on('error', (e) => {
-        console.error(`Problem with request: ${e.message}`);
-        reject(e);
-      });
-  
-      // Write data to request body
-      req.write(postData);
-      req.end();
-    });
-  };
-  
-  // Helper function to process each message
-  const processMessage = (message, connectionId) => {
-    console.log('Processing message:', message);
-    try {
-      // Check and strip "data:" prefix
-      const cleanMessage = message.replace(/^data: /, '').trim();
-      if (cleanMessage) {
-        const data = JSON.parse(cleanMessage);
-        // Handle the data
-        console.log('Data processed:', data);
-      }
-    } catch (error) {
-      console.error('Error processing message:', error);
+  const apiKey = await getPerplexityKey();
+  const postData = JSON.stringify({
+    model: "sonar",
+    messages: messages,
+    stream: true,
+  });
+
+  const options = {
+    hostname: 'api.perplexity.ai',
+    path: '/chat/completions',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
     }
   };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let buffer = '';
+
+      res.on('data', (chunk) => {
+        buffer += chunk.toString();
+        let boundary = buffer.lastIndexOf('\n');
+        if (boundary !== -1) {
+          let completeMessages = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 1);
+          completeMessages.split('\n').forEach(message => {
+            if (message.trim()) processMessage(message, connectionId);
+          });
+        }
+      });
+
+      res.on('end', () => {
+        if (buffer.trim().length > 0) {
+          processMessage(buffer, connectionId, true); // Process any remaining data as last data
+        }
+        console.log('Stream ended');
+        resolve();
+      });
+    });
+
+    req.on('error', (e) => {
+      console.error(`Problem with request: ${e.message}`);
+      reject(e);
+    });
+
+    // Write data to request body
+    req.write(postData);
+    req.end();
+  });
+};
+
+// Helper function to process each message
+const processMessage = (message, connectionId, isLastData = false) => {
+  console.log('Processing message:', message);
+  try {
+    const cleanMessage = message.replace(/^data: /, '').trim();
+    if (cleanMessage) {
+      const data = JSON.parse(cleanMessage);
+      console.log('Data processed:', data);
+
+      if (isFirstData && data.citations) {
+        console.log('First Data Citations:', data.citations);
+        apiGateway.send(new PostToConnectionCommand({
+          ConnectionId: connectionId,
+          Data: JSON.stringify({ citations: data.citations }),
+        }));
+        isFirstData = false; // Update flag after first data
+      }
+
+      if (data.choices && data.choices.length > 0) {
+        const deltaContent = data.choices[0].delta;
+        console.log('Delta Content:', deltaContent);
+        apiGateway.send(new PostToConnectionCommand({
+          ConnectionId: connectionId,
+          Data: JSON.stringify({ delta: deltaContent }),
+        }));
+      }
+
+      if (isLastData) {
+        if (data.choices && data.choices.length > 0) {
+          const messageContent = data.choices[0].message;
+          console.log('Last Data Message:', messageContent);
+        }
+        console.log('Usage Data:', data.usage);
+      }
+    }
+  } catch (error) {
+    console.error('Error processing message:', error);
+  }
+};
+
   
 // Main Lambda Handler
 export const handler = async (event) => {
