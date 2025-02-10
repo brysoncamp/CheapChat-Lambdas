@@ -72,7 +72,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
             console.log('Stream ended without final data. Assume last processed message was final.');
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 50));
         });
       });
   
@@ -108,14 +108,14 @@ const processMessage = async (message, connectionId) => {
             console.log('Data processed:', data);
 
             if (data.choices && data.choices.length > 0) {
-                const deltaContent = data.choices[0].message.content;
+                const deltaContent = data.choices[0].message?.content || "";
                 console.log('Delta Content:', deltaContent);
 
                 const finished = data.choices[0]?.finish_reason === "stop";
 
                 if (deltaContent) {
                     // Store the latest message in the queue
-                    messageQueue[connectionId] = deltaContent;
+                    messageQueue[connectionId] = { message: deltaContent, finished };
 
                     // If a timer does not exist, start one
                     if (!sendTimers[connectionId]) {
@@ -124,11 +124,6 @@ const processMessage = async (message, connectionId) => {
                         }, 100); // 100ms rate limit
                     }
                 }
-
-                if (finished) {
-                    console.log('Finished processing message:', message);
-                    console.log("DATA USAGE", data.usage);
-                }
             }
         }
     } catch (error) {
@@ -136,22 +131,31 @@ const processMessage = async (message, connectionId) => {
     }
 };
 
-// Function to send the latest queued message
+// Function to send the latest queued message, including "done" if it's the last one
 const sendLatestMessage = async (connectionId) => {
     if (messageQueue[connectionId]) {
         try {
+            const { message, finished } = messageQueue[connectionId];
+
+            const responsePayload = finished
+                ? { message, done: true }  // Include "done: true" if it's the last message
+                : { message };
+
             await apiGateway.send(new PostToConnectionCommand({
                 ConnectionId: connectionId,
-                Data: JSON.stringify({ message: messageQueue[connectionId] }),
+                Data: JSON.stringify(responsePayload),
             }));
-            console.log(`Sent message to ${connectionId}:`, messageQueue[connectionId]);
+
+            console.log(`Sent message to ${connectionId}:`, responsePayload);
+
+            // Cleanup if it's the final message
+            if (finished) {
+                delete messageQueue[connectionId];
+                delete sendTimers[connectionId];
+            }
         } catch (error) {
             console.error(`Error sending message to ${connectionId}:`, error);
         }
-        
-        // Cleanup
-        delete messageQueue[connectionId];
-        delete sendTimers[connectionId];
     }
 };
 
@@ -175,12 +179,6 @@ export const handler = async (event) => {
 
     // Fetch Perplexity Streaming Response
     await fetchPerplexityResponse(messages, connectionId, sessionId);
-
-    // Send "done" signal after full response
-    await apiGateway.send(new PostToConnectionCommand({
-      ConnectionId: connectionId,
-      Data: JSON.stringify({ done: true }),
-    }));
 
     console.log("Response sent successfully");
     return { statusCode: 200, body: "Streaming response sent to client" };
