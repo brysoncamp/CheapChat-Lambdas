@@ -24,8 +24,11 @@ const getPerplexityKey = async () => {
     throw new Error("Failed to retrieve Perplexity API Key");
   }
 };
+// Function to handle Perplexity API Request using native https module
 
+let isFirstData = true; // Flag to track if the current data is the first one processed
 
+// Function to handle Perplexity API Request using native https module
 const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
     const apiKey = await getPerplexityKey();
     const postData = JSON.stringify({
@@ -33,7 +36,7 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
       messages: messages,
       stream: true,
     });
-
+  
     const options = {
       hostname: 'api.perplexity.ai',
       path: '/chat/completions',
@@ -43,72 +46,78 @@ const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
         'Authorization': `Bearer ${apiKey}`
       }
     };
-
+  
     return new Promise((resolve, reject) => {
       const req = https.request(options, (res) => {
         let buffer = '';
-        let sequence = 0;
-
-        res.on('data', async (chunk) => { // 🔹 Changed to async
+  
+        res.on('data', (chunk) => {
           buffer += chunk.toString();
           let boundary = buffer.lastIndexOf('\n');
           if (boundary !== -1) {
             let completeMessages = buffer.slice(0, boundary);
             buffer = buffer.slice(boundary + 1);
-
-            for (const message of completeMessages.split('\n')) { // 🔹 Ensures sequential processing
-              if (message.trim()) {
-                sequence++;
-                await processMessage(message, connectionId, sessionId, sequence); // 🔹 Ensures ordered processing
-              }
-            }
+            completeMessages.split('\n').forEach(message => {
+              if (message.trim()) processMessage(message, connectionId);
+            });
           }
         });
-
+  
         res.on('end', () => {
+          // Check if there's any remaining data in the buffer to process as potentially the last data
           if (buffer.trim().length > 0) {
-            sequence++;
-            processMessage(buffer, connectionId, sessionId, sequence);
+            processMessage(buffer, connectionId);
+          } else {
+            // If no data is left, but the stream has ended, assume the last processed message was the final one
+            console.log('Stream ended without final data. Assume last processed message was final.');
           }
           resolve();
         });
       });
-
+  
       req.on('error', (e) => {
         console.error(`Problem with request: ${e.message}`);
         reject(e);
       });
-
+  
+      // Write data to request body
       req.write(postData);
       req.end();
     });
-};
+  };
+  
+  
 
-// ✅ Ensure WebSocket messages are sent in strict order
-const processMessage = async (message, connectionId, sessionId, sequence) => {
-    console.log(`Processing message [Session: ${sessionId}, Seq: ${sequence}]:`, message);
+// Helper function to process each message
+// Helper function to process each message
+// Helper function to process each message
+const processMessage = async (message, connectionId) => {  // Added async here
+    console.log('Processing message:', message);
     try {
-        const cleanMessage = message.replace(/^data: /, '').trim();
-        if (cleanMessage) {
-            const data = JSON.parse(cleanMessage);
-            console.log('Data processed:', data);
-
-            if (data.choices && data.choices.length > 0) {
-                const deltaContent = data.choices[0].delta?.content || "";
-                if (deltaContent) {
-                    await apiGateway.send(new PostToConnectionCommand({  // 🔹 Ensures strict order
-                        ConnectionId: connectionId,
-                        Data: JSON.stringify({ text: deltaContent, seq: sequence, sessionId }),
-                    }));
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Error processing message:', error);
-    }
-};
+      const cleanMessage = message.replace(/^data: /, '').trim();
+      if (cleanMessage) {
+        const data = JSON.parse(cleanMessage);
+        console.log('Data processed:', data);
 
   
+        // Always handle delta
+        if (data.choices && data.choices.length > 0) {
+          const deltaContent = data.choices[0].message.content;
+          console.log('Delta Content:', deltaContent);
+  
+          // Send delta content if not empty
+          if (deltaContent) {
+            await apiGateway.send(new PostToConnectionCommand({  // Added await here
+              ConnectionId: connectionId,
+              Data: JSON.stringify({ message: deltaContent }),
+            }));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error processing message:', error);
+    }
+  };
 
   
   
