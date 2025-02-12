@@ -220,7 +220,7 @@ export const handler = async (event) => {
     console.log("--- saving message to dynamo db ---");
 
     // Determine messageindex 
-    const { Item } = await dynamoDB.send(new QueryCommand({
+    const { Items } = await dynamoDB.send(new QueryCommand({
       TableName: MESSAGES_TABLE,
       KeyConditionExpression: "conversationId = :conversationId",
       ExpressionAttributeValues: {
@@ -230,7 +230,7 @@ export const handler = async (event) => {
       Limit: 1
     }));
 
-    const messageIndex = (Item?.messageIndex ?? -1) + 1;
+    const messageIndex = (Items?.length > 0 ? Items[0].messageIndex : -1) + 1;
 
     console.log("Conversation ID:", conversationId);
     console.log("Message Index:", messageIndex);
