@@ -156,6 +156,8 @@ export const handler = async (event) => {
         break;
       }
 
+      console.log("Open AI Chunk:", chunk); // ✅ Log the chunk for debugging
+
       const text = chunk.choices?.[0]?.delta?.content || "";
       if (text) {
         await apiGateway.send(new PostToConnectionCommand({
