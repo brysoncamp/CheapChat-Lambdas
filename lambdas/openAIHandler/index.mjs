@@ -1,8 +1,8 @@
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { GetCommand, UpdateCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
-import OpenAI from "openai";
+import { GetCommand, UpdateCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import OpenAI from "openai";,
 import { encoding_for_model } from "tiktoken";
 
 // Initialize AWS Clients
