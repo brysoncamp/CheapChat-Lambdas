@@ -24,6 +24,7 @@ export const handler = async (event) => {
 
   // ✅ 1. Get WebSocket `connectionId` from sessionId
   let connectionId;
+  let conversationId;
   try {
     const result = await dynamoDB.send(
       new GetCommand({
@@ -38,7 +39,7 @@ export const handler = async (event) => {
     }
 
     connectionId = result.Item.connectionId;
-    const conversationId = result.Item.conversationId;
+    conversationId = result.Item.conversationId;
     console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);
 
     await apiGateway.send(new PostToConnectionCommand({
