@@ -13,23 +13,11 @@ export const handler = async (event) => {
     const requestOrigin = event.headers?.origin || ""; 
     const allowOrigin = allowedOrigins.includes(requestOrigin) ? requestOrigin : "https://cheap.chat";
 
-    // ✅ Handle preflight (OPTIONS) requests for CORS
-    if (event.httpMethod === "OPTIONS") {
-        return {
-            statusCode: 200,
-            headers: {
-                "Access-Control-Allow-Origin": allowOrigin,
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers": "Authorization, Content-Type"
-            },
-            body: ""
-        };
-    }
-
     // ✅ Extract `conversationId` from GET request query parameters
     const conversationId = event.queryStringParameters?.conversationId;
 
     if (!conversationId) {
+        console.error("❌ Missing conversationId query parameter");
         return {
             statusCode: 400,
             headers: { "Access-Control-Allow-Origin": allowOrigin },
@@ -38,9 +26,10 @@ export const handler = async (event) => {
     }
 
     // ✅ Extract User ID from API Gateway Authorizer (NO manual JWT verification)
-    const userId = event.requestContext.authorizer?.claims?.sub;
+    const userId = event.requestContext?.authorizer?.jwt?.claims?.sub;
 
     if (!userId) {
+        console.error("❌ Unable to extract user ID from token");
         return {
             statusCode: 401,
             headers: { "Access-Control-Allow-Origin": allowOrigin },
