@@ -225,6 +225,9 @@ export const handler = async (event) => {
 
     const messageIndex = (Item?.messageIndex ?? -1) + 1;
 
+    console.log("Conversation ID:", conversationId);
+    console.log("Message Index:", messageIndex);
+
     const messageItem = {
       conversationId,
       messageIndex,
@@ -235,6 +238,8 @@ export const handler = async (event) => {
       completionTokens,
       cost: finalCostDollars
     };
+
+    console.log("Message Item:", messageItem);
     
     await dynamoDB.send(new PutCommand({
       TableName: MESSAGES_TABLE,
