@@ -94,7 +94,7 @@ export const handler = async (event) => {
 
   try {
     console.log(`🔹 Forwarding message to ${functionName}...`);
-    const payload = { action, connectionId, message, sessionId };
+    const payload = { action, connectionId, message, sessionId, conversationId };
 
     await lambda.send(
       new InvokeCommand({

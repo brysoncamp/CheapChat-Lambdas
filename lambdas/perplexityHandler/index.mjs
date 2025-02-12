@@ -192,15 +192,11 @@ const sendLatestMessage = async (connectionId) => {
     }
 };
 
-
-
-  
-  
 // Main Lambda Handler
 export const handler = async (event) => {
   console.log("Perplexity Handler Event:", JSON.stringify(event, null, 2));
 
-  const { action, connectionId, sessionId, message } = event;
+  const { action, connectionId, sessionId, message, conversationId } = event;
   if (!connectionId || !sessionId) {
     return {
       statusCode: 400,
