@@ -53,7 +53,8 @@ const countTokensForMessages = (messages, model = "gpt-4o") => {
 export const handler = async (event) => {
   console.log("🟢 OpenAI Handler Event:", JSON.stringify(event, null, 2));
 
-  const { connectionId, sessionId, message } = event;
+  // "sonar-pro"
+  const { action, connectionId, sessionId, message } = event;
   if (!connectionId || !sessionId) {
     return {
       statusCode: 400,
@@ -104,7 +105,7 @@ export const handler = async (event) => {
 
     // ✅ OpenAI Streaming Request
     const response = await openai.chat.completions.create({
-      model: "chatgpt-4o-latest",
+      model: action,
       messages: messages,
       stream: true,
       stream_options: { include_usage: true },

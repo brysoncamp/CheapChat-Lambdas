@@ -70,8 +70,19 @@ export const handler = async (event) => {
 
   // ✅ 3. Route messages to OpenAI Lambda
   const lambdaFunctionMap = { 
-    openai: "openAIHandler",
-    perplexity: "perplexityHandler"
+    "gpt-4o": "openAIHandler",
+    "gpt-4o-mini": "openAIHandler",
+    "o1": "openAIHandler",
+    "o1-mini": "openAIHandler",
+    "o3-mini": "openAIHandler",
+    "chatgpt-4o-latest": "openAIHandler",
+    "gpt-4-turbo": "openAIHandler",
+    "gpt-4": "openAIHandler",
+    "gpt-3.5-turbo": "openAIHandler",
+    "sonar-reasoning-pro": "perplexityHandler",
+    "sonar-reasoning": "perplexityHandler",
+    "sonar-pro": "perplexityHandler",
+    "sonar": "perplexityHandler"
   };
 
   const functionName = lambdaFunctionMap[action];
@@ -83,7 +94,7 @@ export const handler = async (event) => {
 
   try {
     console.log(`🔹 Forwarding message to ${functionName}...`);
-    const payload = { connectionId, message, sessionId };
+    const payload = { action, connectionId, message, sessionId };
 
     await lambda.send(
       new InvokeCommand({

@@ -29,10 +29,10 @@ const getPerplexityKey = async () => {
 let isFirstData = true; // Flag to track if the current data is the first one processed
 
 // Function to handle Perplexity API Request using native https module
-const fetchPerplexityResponse = async (messages, connectionId, sessionId) => {
+const fetchPerplexityResponse = async (action, messages, connectionId, sessionId) => {
     const apiKey = await getPerplexityKey();
     const postData = JSON.stringify({
-      model: "sonar",
+      model: action,
       messages: messages,
       stream: true,
     });
@@ -200,7 +200,7 @@ const sendLatestMessage = async (connectionId) => {
 export const handler = async (event) => {
   console.log("Perplexity Handler Event:", JSON.stringify(event, null, 2));
 
-  const { connectionId, sessionId, message } = event;
+  const { action, connectionId, sessionId, message } = event;
   if (!connectionId || !sessionId) {
     return {
       statusCode: 400,
@@ -213,7 +213,7 @@ export const handler = async (event) => {
     const messages = [{ role: "user", content: message }];
 
     // Fetch Perplexity Streaming Response
-    await fetchPerplexityResponse(messages, connectionId, sessionId);
+    await fetchPerplexityResponse(action, messages, connectionId, sessionId);
 
     console.log("Response sent successfully");
     return { statusCode: 200, body: "Streaming response sent to client" };
