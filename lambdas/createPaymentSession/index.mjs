@@ -14,6 +14,7 @@ export const handler = async (event) => {
     const allowOrigin = allowedOrigins.includes(requestOrigin) ? requestOrigin : "https://cheap.chat"; 
 
     try {
+        // CONSIDER CHANGING BELOW BASED ON GET CHAT HISTORY, THIS MAY BE UNNECESSARY/UNSAFE
         // ✅ Extract Authorization header
         const authHeader = event.headers?.Authorization || event.headers?.authorization;
         if (!authHeader || !authHeader.startsWith("Bearer ")) {

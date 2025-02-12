@@ -19,6 +19,7 @@ jobs:
           - messageRouterHandler
           - openAIHandler
           - perplexityHandler
+          - getChatHistory
 
     steps:
       - name: Checkout code

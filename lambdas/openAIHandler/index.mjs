@@ -207,6 +207,7 @@ export const handler = async (event) => {
     }
 
     const cost = (promptTokens * priceData.input) + (completionTokens * priceData.output);
+    const finalCost = Number(cost.toFixed(8));
     
     // Convert token counts to BigInt to avoid precision issues
     /*
@@ -242,7 +243,7 @@ export const handler = async (event) => {
       model: action,
       promptTokens,
       completionTokens,
-      cost
+      cost: finalCost
     };
 
     console.log("Message Item:", messageItem);
