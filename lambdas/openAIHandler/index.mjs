@@ -188,15 +188,16 @@ export const handler = async (event) => {
     console.log("--- calculating cost ---");
 
     const modelCosts = {
-      "gpt-4o": { "input": 5, "output": 20 }, // 5 µ$ per token input, 20 µ$ per token output
-      "gpt-4o-mini": { "input": 0.15, "output": 0.6 },
-      "o1-mini": { "input": 2.2, "output": 8.8 },
-      "o3-mini": { "input": 2.2, "output": 8.8 },
-      "chatgpt-4o-latest": { "input": 10, "output": 30 },
-      "gpt-4-turbo": { "input": 20, "output": 60 },
-      "gpt-4": { "input": 60, "output": 120 },
-      "gpt-3.5-turbo": { "input": 1, "output": 3 }
+      "gpt-4o": { "input": 0.000005, "output": 0.00002 },
+      "gpt-4o-mini": { "input": 0.00000015, "output": 0.0000006 },
+      "o1-mini": { "input": 0.0000022, "output": 0.0000088 },
+      "o3-mini": { "input": 0.0000022, "output": 0.0000088 },
+      "chatgpt-4o-latest": { "input": 0.00001, "output": 0.00003 },
+      "gpt-4-turbo": { "input": 0.00002, "output": 0.00006 },
+      "gpt-4": { "input": 0.00006, "output": 0.00012 },
+      "gpt-3.5-turbo": { "input": 0.000001, "output": 0.000003 }
     };
+    
     
     const priceData = modelCosts[action];
     
@@ -204,16 +205,16 @@ export const handler = async (event) => {
       console.error(`❌ Unknown model: ${action}`);
       throw new Error(`Unknown model: ${action}`);
     }
+
+    const cost = (promptTokens * priceData.input) + (completionTokens * priceData.output);
     
     // Convert token counts to BigInt to avoid precision issues
+    /*
     const promptCostMicroDollars = BigInt(Math.round(promptTokens * priceData.input * 1e6));  // µ$
     const completionCostMicroDollars = BigInt(Math.round(completionTokens * priceData.output * 1e6)); // µ$
-    
     const totalCostMicroDollars = promptCostMicroDollars + completionCostMicroDollars;
-    
-    // Convert from µ$ to dollars at the end
     const finalCostDollars = Number(totalCostMicroDollars) / 1e6;
-    console.log("Final Cost (USD):", finalCostDollars);
+    */
 
     console.log("--- saving message to dynamo db ---");
 
@@ -241,7 +242,7 @@ export const handler = async (event) => {
       model: action,
       promptTokens,
       completionTokens,
-      cost: finalCostDollars
+      cost
     };
 
     console.log("Message Item:", messageItem);
@@ -251,7 +252,7 @@ export const handler = async (event) => {
       Item: messageItem,
     }));
 
-    console.log(`🟢 Token Usage: Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`);
+    //console.log(`🟢 Token Usage: Prompt = ${promptTokens}, Completion = ${completionTokens}, Total = ${totalTokens}`);
 
 
     // sned this data to messages table (dynamo db)
