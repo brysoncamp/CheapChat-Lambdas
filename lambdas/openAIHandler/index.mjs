@@ -65,6 +65,43 @@ export const handler = async (event) => {
   }
 
   try {
+
+    const { Items: recentMessages = [] } = await dynamoDB.send(new QueryCommand({
+      TableName: MESSAGES_TABLE,
+      KeyConditionExpression: "conversationId = :conversationId",
+      ExpressionAttributeValues: {
+        ":conversationId": conversationId
+      },
+      ScanIndexForward: false, // Get the latest messages first
+      Limit: 5
+    }));
+    
+    // ✅ Ensure we have a safe array and reverse for correct order
+    const messages = [];
+    for (const msg of recentMessages.reverse()) { 
+      if (msg.query) messages.push({ role: "user", content: msg.query });
+      if (msg.response) messages.push({ role: "assistant", content: msg.response });
+    }
+    
+    // ✅ Always add the new user message
+    messages.push({ role: "user", content: message });
+    
+    console.log("🟢 Final messages array:", messages);
+    
+   
+
+    /*
+    const messagesArray = [];
+
+    recentMessages.forEach(msg => {
+      messagesArray.push({ role: "user", content: msg.query });
+      messagesArray.push({ role: "assistant", content: msg.response });
+    });
+    */
+
+
+    // 
+
     console.log(`🔹 Sending message to OpenAI: ${message}`);
     const apiKey = await getOpenAIKey();
     const openai = new OpenAI({ apiKey });
@@ -103,7 +140,7 @@ export const handler = async (event) => {
     checkCancellation();
 
     // ✅ Prepare messages for token estimation
-    const messages = [{ role: "user", content: message }];
+    //const messages = [{ role: "user", content: message }];
 
     // ✅ OpenAI Streaming Request
     const response = await openai.chat.completions.create({
