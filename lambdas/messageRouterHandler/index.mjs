@@ -15,7 +15,7 @@ const apiGateway = new ApiGatewayManagementApiClient({
 export const handler = async (event) => {
   console.log("🟢 WebSocket Message Event:", JSON.stringify(event, null, 2));
 
-  const { sessionId, action, message } = event;
+  const { sessionId, action, message, conversationId: eventConversationId } = event;
 
   if (!sessionId || !action) {
     console.error("❌ Missing sessionId or action");
@@ -24,7 +24,8 @@ export const handler = async (event) => {
 
   // ✅ 1. Get WebSocket `connectionId` from sessionId
   let connectionId;
-  let conversationId;
+  let conversationId = eventConversationId;
+
   try {
     const result = await dynamoDB.send(
       new GetCommand({
@@ -39,7 +40,11 @@ export const handler = async (event) => {
     }
 
     connectionId = result.Item.connectionId;
-    conversationId = result.Item.conversationId;
+    
+    if (!conversationId) {
+      conversationId = result.Item.conversationId;
+    }
+
     console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);
 
     await apiGateway.send(new PostToConnectionCommand({
