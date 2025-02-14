@@ -1,9 +1,9 @@
-name: Deploy AWS Lambdas and Layers
+name: Deploy AWS Lambdas
 
 on:
   push:
     branches:
-      - main
+      - main 
 
 jobs:
   deploy:
@@ -21,7 +21,8 @@ jobs:
           - perplexityHandler
           - getChatHistory
         layer:
-          - openAIALayer
+          - openAIHandler
+       
 
     steps:
       - name: Checkout code
@@ -32,25 +33,15 @@ jobs:
         with:
           node-version: 22
 
-      # For deploying Lambda functions
-      - name: Install dependencies for Lambda functions
-        if: ${{ matrix.function }}
+      - name: Install dependencies
         run: |
           cd lambdas/${{ matrix.function }}
           npm install
 
       - name: Zip the Lambda function
-        if: ${{ matrix.function }}
         run: |
           cd lambdas/${{ matrix.function }}
           zip -r ../../${{ matrix.function }}.zip .
-
-      # For deploying Lambda layers
-      - name: Prepare Lambda layer zip
-        if: ${{ matrix.layer }}
-        run: |
-          cd layers/${{ matrix.layer }}
-          zip -r ../../${{ matrix.layer }}.zip .
 
       - name: Configure AWS CLI
         run: |
@@ -58,18 +49,9 @@ jobs:
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws configure set region ${{ secrets.AWS_REGION }}
 
-      - name: Deploy Lambda function to AWS
-        if: ${{ matrix.function }}
+      - name: Deploy to AWS Lambda using AWS CLI
         run: |
           aws lambda update-function-code \
             --function-name ${{ matrix.function }} \
             --zip-file fileb://${{ matrix.function }}.zip \
-            --region ${{ secrets.AWS_REGION }}
-
-      - name: Deploy Lambda layer to AWS
-        if: ${{ matrix.layer }}
-        run: |
-          aws lambda publish-layer-version \
-            --layer-name ${{ matrix.layer }} \
-            --zip-file fileb://${{ matrix.layer }}.zip \
             --region ${{ secrets.AWS_REGION }}

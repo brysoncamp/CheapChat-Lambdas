@@ -3,7 +3,9 @@ import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand, UpdateCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import OpenAI from "openai";
-import { encoding_for_model } from "tiktoken";
+//import { encoding_for_model } from "tiktoken";
+
+import { countTokens, countTokensForMessages } from '/opt/nodejs/tokenCounter.mjs';
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
@@ -29,6 +31,7 @@ const getOpenAIKey = async () => {
 };
 
 // Accurate token counting for completion tokens
+/*
 const countTokens = (text, model = "gpt-4o") => {
   const encoder = encoding_for_model(model);
   const tokenCount = encoder.encode(text).length + 1;
@@ -50,7 +53,7 @@ const countTokensForMessages = (messages, model = "gpt-4o") => {
 
   return tokenCount;
 };
-
+*/
 
 export const handler = async (event) => {
   console.log("🟢 OpenAI Handler Event:", JSON.stringify(event, null, 2));
