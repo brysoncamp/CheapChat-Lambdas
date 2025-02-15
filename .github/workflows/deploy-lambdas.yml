@@ -21,7 +21,7 @@ jobs:
           - perplexityHandler
           - getChatHistory
         layer:
-          - openAIALayer
+          - openAILayer
 
     steps:
       - name: Checkout code
