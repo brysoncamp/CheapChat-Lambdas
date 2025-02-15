@@ -12,6 +12,8 @@ jobs:
       matrix:
         layer:
           - openAILayer
+          - modelLayer
+          - awsLayer
 
     steps:
       - name: Checkout code
