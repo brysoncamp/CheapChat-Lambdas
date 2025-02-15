@@ -4,7 +4,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand, UpdateCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import OpenAI from "openai";
 
-import { calculateCost, estimateCost } from "/opt/nodejs/estimateCost.mjs";
+import { calculateCost, estimateCost } from "/opt/nodejs/estimateCost";
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
