@@ -2,23 +2,8 @@ import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-sec
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand, UpdateCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import OpenAI from "openai";
-
-
-import fs from "fs";
-
-try {
-    console.log("🟢 Listing contents of /opt/");
-    console.log(fs.readdirSync("/opt"));
-
-    console.log("🟢 Listing contents of /opt/nodejs/");
-    console.log(fs.readdirSync("/opt/nodejs"));
-} catch (error) {
-    console.error("❌ Error reading /opt/ directories:", error);
-}
-
-
-import { calculateCost, estimateCost } from "/opt/nodejs/estimateCost.mjs";
+import { calculateCost, estimateCost } from "/opt/nodejs/openAICost.mjs";
+import { getOpenAIResponse, processOpenAIStream } from "/opt/nodejs/openAiHelper.mjs";
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
@@ -46,7 +31,6 @@ const getOpenAIKey = async () => {
 export const handler = async (event) => {
   console.log("🟢 OpenAI Handler Event:", JSON.stringify(event, null, 2));
 
-  // "sonar-pro"
   const { action, connectionId, sessionId, message, conversationId } = event;
   if (!action || !connectionId || !sessionId || !message || !conversationId) {
     return {
@@ -81,7 +65,7 @@ export const handler = async (event) => {
 
     console.log(`🔹 Sending message to OpenAI: ${message}`);
     const apiKey = await getOpenAIKey();
-    const openai = new OpenAI({ apiKey });
+    //const openai = new OpenAI({ apiKey });
 
     let isCanceled = false;
     let timeoutTriggered = false;
@@ -116,16 +100,9 @@ export const handler = async (event) => {
     // ✅ Start cancellation check in parallel
     checkCancellation();
 
-    // ✅ Prepare messages for token estimation
-    //const messages = [{ role: "user", content: message }];
+    const response = await getOpenAIResponse(apiKey, action, messages);
+    
 
-    // ✅ OpenAI Streaming Request
-    const response = await openai.chat.completions.create({
-      model: action,
-      messages: messages,
-      stream: true,
-      stream_options: { include_usage: true },
-    });
 
     console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${connectionId}`);
 
