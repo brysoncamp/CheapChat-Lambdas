@@ -48,7 +48,9 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --query 'Version' --output text)
 
-          sleep 5
+          echo "Waiting for layer propagation..."
+          sleep 10
+          echo "Wait complete, proceeding with function updates."
 
           declare -A LAYER_FUNCTIONS=(
             ["openAILayer"]="openAIHandler"
