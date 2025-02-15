@@ -48,6 +48,8 @@ jobs:
             --region ${{ secrets.AWS_REGION }} \
             --query 'Version' --output text)
 
+          sleep 5
+
           declare -A LAYER_FUNCTIONS=(
             ["openAILayer"]="openAIHandler"
             ["modelLayer"]="openAIHandler"
