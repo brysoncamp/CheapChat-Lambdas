@@ -1,4 +1,4 @@
-import { queryLatestDynamo } from "/opt/nodejs/dynamoDB/openAIHelper.mjs";
+import { queryLatestDynamo } from "/opt/nodejs/dynamoDB/queryDynamo.mjs";
 
 export const getRecentMessages = async (tableName, conversationId, message, limit = 5) => {
   const recentMessages = await queryLatestDynamo(tableName, "conversationId = :conversationId", { ":conversationId": conversationId }, limit);
