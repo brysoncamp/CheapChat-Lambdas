@@ -4,7 +4,21 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand, UpdateCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import OpenAI from "openai";
 
-import { calculateCost, estimateCost } from "/opt/nodejs/estimateCost";
+
+import fs from "fs";
+
+try {
+    console.log("🟢 Listing contents of /opt/");
+    console.log(fs.readdirSync("/opt"));
+
+    console.log("🟢 Listing contents of /opt/nodejs/");
+    console.log(fs.readdirSync("/opt/nodejs"));
+} catch (error) {
+    console.error("❌ Error reading /opt/ directories:", error);
+}
+
+
+import { calculateCost, estimateCost } from "/opt/nodejs/estimateCost.mjs";
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
