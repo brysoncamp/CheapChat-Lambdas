@@ -3,7 +3,7 @@ import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand, UpdateCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { calculateCost, estimateCost } from "/opt/nodejs/openAICost.mjs";
-import { getOpenAIResponse, processOpenAIStream } from "/opt/nodejs/openAiHelper.mjs";
+import { getOpenAIResponse, processOpenAIStream } from "/opt/nodejs/openAIHelper.mjs";
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
@@ -101,7 +101,7 @@ export const handler = async (event) => {
     checkCancellation();
 
     const response = await getOpenAIResponse(apiKey, action, messages);
-    
+
 
 
     console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${connectionId}`);
