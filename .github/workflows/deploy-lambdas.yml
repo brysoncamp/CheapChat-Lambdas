@@ -40,25 +40,35 @@ jobs:
 
       - name: Deploy or Update Lambda Layer
         run: |
-          # Upload the new layer version
+          # Publish new layer version and get its version number
           LAYER_VERSION=$(aws lambda publish-layer-version \
             --layer-name ${{ matrix.layer }} \
-            --zip-file fileb://${{ matrix.layer }}.zip \
+            --zip-file fileb://layers/${{ matrix.layer }}.zip \
             --region ${{ secrets.AWS_REGION }} \
             --query 'Version' --output text)
-          
-          echo "🔹 New Layer Version: $LAYER_VERSION"
 
-          # Get all Lambda functions that use this layer
-          FUNCTION_NAMES=$(aws lambda list-functions --query "Functions[?starts_with(FunctionName, '${{ matrix.layer }}')].FunctionName" --output text --region ${{ secrets.AWS_REGION }})
+          # Define functions that should be updated for each layer
+          declare -A LAYER_FUNCTIONS=(
+            ["openAILayer"]="openAIHandler"
+          )
 
-          # Update all Lambda functions to use the latest layer version
-          for FUNCTION in $FUNCTION_NAMES; do
-            echo "🔄 Updating $FUNCTION with Layer Version $LAYER_VERSION"
-            aws lambda update-function-configuration \
-              --function-name $FUNCTION \
-              --layers arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:layer:${{ matrix.layer }}:$LAYER_VERSION
-          done
+          FUNCTIONS="${LAYER_FUNCTIONS["${{ matrix.layer }}"]}"
+
+          # Update only relevant functions
+          if [[ -n "$FUNCTIONS" ]]; then
+            for FUNCTION in $FUNCTIONS; do
+              aws lambda update-function-configuration \
+                --function-name $FUNCTION \
+                --layers arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:layer:${{ matrix.layer }}:$LAYER_VERSION
+            done
+          fi
+
+  # EXAMPLE (extended version) for ^^^^^
+  #
+  # declare -A LAYER_FUNCTIONS=(
+  #   ["openAILayer"]="openAIHandler messageRouterHandler"
+  #   ["stripeLayer"]="handleStripeWebhook createPaymentSession"
+  # )
 
   deploy-functions:  # ✅ Separate job for functions
     runs-on: ubuntu-latest
