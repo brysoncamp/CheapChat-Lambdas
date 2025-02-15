@@ -1,16 +1,21 @@
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { GetCommand, UpdateCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+
+/*import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { GetCommand, UpdateCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";*/
+
 import { calculateCost, estimateCost } from "/opt/nodejs/openAICost.mjs";
 import { getOpenAIResponse, processOpenAIStream } from "/opt/nodejs/openAIHelper.mjs";
+import { getRecentMessages } from "/opt/nodejs/messagesHelper.mjs";
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
 const apiGateway = new ApiGatewayManagementApiClient({
   endpoint: process.env.WEBSOCKET_ENDPOINT,
 });
-const dynamoDB = new DynamoDBClient({});
+
+// const dynamoDB = new DynamoDBClient({});
+
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME;
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE_NAME;
 
@@ -41,6 +46,9 @@ export const handler = async (event) => {
 
   try {
 
+    const messages = await getRecentMessages(MESSAGES_TABLE, conversationId, message, 5);
+
+    /*
     const { Items: recentMessages = [] } = await dynamoDB.send(new QueryCommand({
       TableName: MESSAGES_TABLE,
       KeyConditionExpression: "conversationId = :conversationId",
@@ -60,6 +68,13 @@ export const handler = async (event) => {
     
     // ✅ Always add the new user message
     messages.push({ role: "user", content: message });
+
+    // const messages = await getRecentMessages(conversationId, message, 5);
+
+    */
+
+
+
     
     console.log("🟢 Final messages array:", messages);
 

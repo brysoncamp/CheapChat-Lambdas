@@ -32,7 +32,6 @@ jobs:
           cd layers/${{ matrix.layer }}
           zip -r ../${{ matrix.layer }}.zip nodejs
 
-
       - name: Configure AWS CLI
         run: |
           aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -41,21 +40,20 @@ jobs:
 
       - name: Deploy or Update Lambda Layer
         run: |
-          # Publish new layer version and get its version number
           LAYER_VERSION=$(aws lambda publish-layer-version \
             --layer-name ${{ matrix.layer }} \
             --zip-file fileb://layers/${{ matrix.layer }}.zip \
             --region ${{ secrets.AWS_REGION }} \
             --query 'Version' --output text)
 
-          # Define functions that should be updated for each layer
           declare -A LAYER_FUNCTIONS=(
             ["openAILayer"]="openAIHandler"
+            ["modelLayer"]="openAIHandler"
+            ["awsLayer"]="openAIHandler"
           )
 
           FUNCTIONS="${LAYER_FUNCTIONS["${{ matrix.layer }}"]}"
 
-          # Update only relevant functions
           if [[ -n "$FUNCTIONS" ]]; then
             for FUNCTION in $FUNCTIONS; do
               aws lambda update-function-configuration \
@@ -71,9 +69,9 @@ jobs:
   #   ["stripeLayer"]="handleStripeWebhook createPaymentSession"
   # )
 
-  deploy-functions:  # ✅ Separate job for functions
+  deploy-functions:
     runs-on: ubuntu-latest
-    needs: deploy-layers  # ✅ Wait for layer deployment to complete
+    needs: deploy-layers
     strategy:
       matrix:
         function:
