@@ -32,7 +32,7 @@ const modelCosts = {
 };
 
 export const calculateCost = (promptTokens, completionTokens, model) => {
-  const priceData = modelCosts[action];
+  const priceData = modelCosts[model];
   if (!priceData) throw new Error(`Unknown model: ${model}`);
 
   const unroundedCost = (promptTokens * priceData.input) + (completionTokens * priceData.output);
