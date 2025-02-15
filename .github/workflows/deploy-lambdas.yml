@@ -30,7 +30,8 @@ jobs:
       - name: Prepare Lambda layer zip
         run: |
           cd layers/${{ matrix.layer }}
-          zip -r ../../${{ matrix.layer }}.zip nodejs
+          zip -r ../${{ matrix.layer }}.zip nodejs
+
 
       - name: Configure AWS CLI
         run: |
