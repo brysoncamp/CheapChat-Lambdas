@@ -9,7 +9,7 @@ jobs:
   deploy-layers:
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 1  # Ensures each layer publish/update runs sequentially
+      max-parallel: 1  # ensures sequential layer publishing/updates
       matrix:
         layer:
           - openAILayer
@@ -51,6 +51,9 @@ jobs:
             --query 'Version' \
             --output text)
 
+          # Build the ARN of the new layer
+          NEW_LAYER_ARN="arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:layer:${{ matrix.layer }}:$LAYER_VERSION"
+
           # 2) Map each layer to one or more functions
           declare -A LAYER_FUNCTIONS=(
             ["openAILayer"]="openAIHandler"
@@ -64,24 +67,29 @@ jobs:
             exit 0
           fi
 
-          # 3) Build the ARN for the newly published layer
-          NEW_LAYER_ARN="arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:layer:${{ matrix.layer }}:$LAYER_VERSION"
-
-          # 4) For each function mapped to this layer, retrieve existing layers and add the new one
           for FUNCTION in $FUNCTIONS; do
             echo "Updating function: $FUNCTION with layer: $NEW_LAYER_ARN"
-            
-            # Retrieve current layers (space-separated)
+
+            # 3) Retrieve current layers for the function
             OLD_LAYERS=$(aws lambda get-function-configuration \
               --function-name "$FUNCTION" \
               --query 'Layers[].Arn' \
               --output text 2>/dev/null | tr '\n' ' ')
 
-            # If the function has no layers yet, OLD_LAYERS might be empty.
-            # Now update with both old layers (if any) plus the new one
+            # 4) (NEW) Filter out any layer ARN that references the same layer NAME
+            #    to avoid having multiple versions of the same layer on the function.
+            CLEANED_OLD_LAYERS=""
+            for L in $OLD_LAYERS; do
+              # If $L doesn't contain ":layer:${{ matrix.layer }}:" then keep it
+              if [[ "$L" != *":layer:${{ matrix.layer }}:"* ]]; then
+                CLEANED_OLD_LAYERS="$CLEANED_OLD_LAYERS $L"
+              fi
+            done
+
+            # 5) Update the function with the "cleaned" old layers + the new layer
             aws lambda update-function-configuration \
               --function-name "$FUNCTION" \
-              --layers $OLD_LAYERS "$NEW_LAYER_ARN"
+              --layers $CLEANED_OLD_LAYERS "$NEW_LAYER_ARN"
           done
 
   # --------------
