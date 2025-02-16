@@ -6,10 +6,10 @@ on:
       - main
 
 jobs:
-  deploy-layers: 
+  deploy-layers:
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 1
+      max-parallel: 1  # Ensures each layer publish/update runs sequentially
       matrix:
         layer:
           - openAILayer
@@ -43,12 +43,15 @@ jobs:
 
       - name: Deploy or Update Lambda Layer
         run: |
+          # 1) Publish a new version of the layer
           LAYER_VERSION=$(aws lambda publish-layer-version \
             --layer-name ${{ matrix.layer }} \
             --zip-file fileb://layers/${{ matrix.layer }}.zip \
             --region ${{ secrets.AWS_REGION }} \
-            --query 'Version' --output text)
+            --query 'Version' \
+            --output text)
 
+          # 2) Map each layer to one or more functions
           declare -A LAYER_FUNCTIONS=(
             ["openAILayer"]="openAIHandler"
             ["modelLayer"]="openAIHandler"
@@ -56,21 +59,38 @@ jobs:
           )
 
           FUNCTIONS="${LAYER_FUNCTIONS["${{ matrix.layer }}"]}"
-
-          if [[ -n "$FUNCTIONS" ]]; then
-            for FUNCTION in $FUNCTIONS; do
-              aws lambda update-function-configuration \
-                --function-name $FUNCTION \
-                --layers arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:layer:${{ matrix.layer }}:$LAYER_VERSION
-            done
+          if [[ -z "$FUNCTIONS" ]]; then
+            echo "No functions mapped to ${{ matrix.layer }}, skipping update."
+            exit 0
           fi
 
-  # EXAMPLE (extended version) for ^^^^^
-  #
+          # 3) Build the ARN for the newly published layer
+          NEW_LAYER_ARN="arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:layer:${{ matrix.layer }}:$LAYER_VERSION"
+
+          # 4) For each function mapped to this layer, retrieve existing layers and add the new one
+          for FUNCTION in $FUNCTIONS; do
+            echo "Updating function: $FUNCTION with layer: $NEW_LAYER_ARN"
+            
+            # Retrieve current layers (space-separated)
+            OLD_LAYERS=$(aws lambda get-function-configuration \
+              --function-name "$FUNCTION" \
+              --query 'Layers[].Arn' \
+              --output text 2>/dev/null | tr '\n' ' ')
+
+            # If the function has no layers yet, OLD_LAYERS might be empty.
+            # Now update with both old layers (if any) plus the new one
+            aws lambda update-function-configuration \
+              --function-name "$FUNCTION" \
+              --layers $OLD_LAYERS "$NEW_LAYER_ARN"
+          done
+
+  # --------------
+  # Example usage for extended mapping:
   # declare -A LAYER_FUNCTIONS=(
   #   ["openAILayer"]="openAIHandler messageRouterHandler"
   #   ["stripeLayer"]="handleStripeWebhook createPaymentSession"
   # )
+  # --------------
 
   deploy-functions:
     runs-on: ubuntu-latest
