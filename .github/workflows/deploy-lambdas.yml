@@ -9,6 +9,7 @@ jobs:
   deploy-layers: 
     runs-on: ubuntu-latest
     strategy:
+      max-parallel: 1
       matrix:
         layer:
           - openAILayer
@@ -47,10 +48,6 @@ jobs:
             --zip-file fileb://layers/${{ matrix.layer }}.zip \
             --region ${{ secrets.AWS_REGION }} \
             --query 'Version' --output text)
-
-          echo "Waiting for layer propagation..."
-          sleep 10
-          echo "Wait complete, proceeding with function updates."
 
           declare -A LAYER_FUNCTIONS=(
             ["openAILayer"]="openAIHandler"
