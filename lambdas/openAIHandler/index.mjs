@@ -28,7 +28,7 @@ export const handler = async (event) => {
     checkCancellation(CONNECTIONS_TABLE, statusFlags);
 
     const response = await getOpenAIResponse(apiKey, action, messages);
-    const { promptTokens, completionTokens, receivedUsage, fullResponse } = await processOpenAIStream(response, connectionId, statusFlags);
+    const { promptTokens, completionTokens, receivedUsage, fullResponse } = await processOpenAIStream(response, connectionId, sessionId, statusFlags);
 
     /*
     let promptTokens = 0;
