@@ -28,7 +28,7 @@ export const processOpenAIStream = async (response, connectionId, statusFlags) =
 
     if (statusFlags.timeoutTriggered || statusFlags.isCanceled) {
       const message = statusFlags.isCanceled ? { canceled: true } : { timeout: true };
-      sendMessage(connectionId, message);
+      await sendMessage(connectionId, message);
 
       if (statusFlags.isCanceled) await removeDynamoAttribute(CONNECTIONS_TABLE, { sessionId }, "canceled");
       
@@ -37,7 +37,7 @@ export const processOpenAIStream = async (response, connectionId, statusFlags) =
 
     const text = chunk.choices?.[0]?.delta?.content || "";
     if (text) {
-      sendMessage(connectionId, { text });
+      await sendMessage(connectionId, { text });
       fullResponse += text;
     }
   }
