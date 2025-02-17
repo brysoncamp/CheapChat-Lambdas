@@ -6,9 +6,9 @@ import { getRecentMessages } from "/opt/nodejs/messagesHelper.mjs";
 import { getOpenAIKey } from "/opt/nodejs/openAIKey.mjs";
 import { startTimeout, checkCancellation } from "/opt/nodejs/statusHelper.mjs";
 
-const apiGateway = new ApiGatewayManagementApiClient({
+/*const apiGateway = new ApiGatewayManagementApiClient({
   endpoint: process.env.WEBSOCKET_ENDPOINT,
-});
+});*/
 
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME;
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE_NAME;
@@ -33,13 +33,16 @@ export const handler = async (event) => {
     checkCancellation(CONNECTIONS_TABLE, statusFlags);
 
     const response = await getOpenAIResponse(apiKey, action, messages);
+    const { promptTokens, completionTokens, receivedUsage, fullResponse } = await processOpenAIStream(response, apiGateway, connectionId, statusFlags);
 
+    /*
     let promptTokens = 0;
     let completionTokens = 0;
     let receivedUsage = false;
     let fullResponse = "";
 
     // ✅ Process OpenAI Streaming
+
     for await (const chunk of response) {
       if (chunk.usage) {
         promptTokens = chunk.usage.prompt_tokens;
@@ -81,12 +84,11 @@ export const handler = async (event) => {
         }));
         fullResponse += text;
       }
-    }
+    }*/
 
     clearTimeout(timeout);
 
-    // ✅ If request wasn't canceled, send "done"
-    if (!timeoutTriggered && !isCanceled) {
+    if (!statusFlags.timeoutTriggered && !statusFlags.isCanceled) {
       await apiGateway.send(new PostToConnectionCommand({
         ConnectionId: connectionId,
         Data: JSON.stringify({ done: true }),

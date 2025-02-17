@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { sendMessage } from "/opt/nodejs/apiGateway.mjs";
+import { removeDynamoAttribute } from "/opt/nodejs/dynamoDB/updateDynamo.mjs";
 
 export const getOpenAIResponse = async (apiKey, model, messages) => {
   const openai = new OpenAI({ apiKey });
@@ -11,7 +13,7 @@ export const getOpenAIResponse = async (apiKey, model, messages) => {
   });
 };
 
-export const processOpenAIStream = async (response, apiGateway, connectionId, statusFlags) => {
+export const processOpenAIStream = async (response, connectionId, statusFlags) => {
   let promptTokens = 0;
   let completionTokens = 0;
   let receivedUsage = false;
@@ -24,12 +26,18 @@ export const processOpenAIStream = async (response, apiGateway, connectionId, st
       receivedUsage = true;
     }
 
+    if (statusFlags.timeoutTriggered || statusFlags.isCanceled) {
+      const message = statusFlags.isCanceled ? { canceled: true } : { timeout: true };
+      sendMessage(connectionId, message);
+
+      if (statusFlags.isCanceled) await removeDynamoAttribute(CONNECTIONS_TABLE, { sessionId }, "canceled");
+      
+      break;
+    }
+
     const text = chunk.choices?.[0]?.delta?.content || "";
     if (text) {
-      await apiGateway.send(new PostToConnectionCommand({
-        ConnectionId: connectionId,
-        Data: JSON.stringify({ text }),
-      }));
+      sendMessage(connectionId, { text });
       fullResponse += text;
     }
   }
