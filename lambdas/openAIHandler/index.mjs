@@ -4,7 +4,7 @@ import { calculateCost, estimateCost } from "/opt/nodejs/openAICost.mjs";
 import { getOpenAIResponse, processOpenAIStream } from "/opt/nodejs/openAIHelper.mjs";
 import { getRecentMessages } from "/opt/nodejs/messagesHelper.mjs";
 import { getOpenAIKey } from "/opt/nodejs/openAIKey.mjs";
-import { startTimeout, checkCancellation } from "opt/nodejs/statusHelper.mjs";
+import { startTimeout, checkCancellation } from "/opt/nodejs/statusHelper.mjs";
 
 const apiGateway = new ApiGatewayManagementApiClient({
   endpoint: process.env.WEBSOCKET_ENDPOINT,
