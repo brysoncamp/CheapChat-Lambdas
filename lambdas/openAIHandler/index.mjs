@@ -1,9 +1,10 @@
 import { calculateCost, estimateCost } from "/opt/nodejs/openAICost.mjs";
 import { getOpenAIResponse, processOpenAIStream } from "/opt/nodejs/openAIHelper.mjs";
-import { getRecentMessages } from "/opt/nodejs/messagesHelper.mjs";
+import { getRecentMessages, getNextMessageIndex } from "/opt/nodejs/messagesHelper.mjs";
 import { getOpenAIKey } from "/opt/nodejs/openAIKey.mjs";
 import { startTimeout, checkCancellation } from "/opt/nodejs/statusHelper.mjs";
 import { sendMessage } from "/opt/nodejs/apiGateway.mjs";
+import { putDynamoItem } from "/opt/nodejs/dynamoDB/putDynamo.mjs";
 
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME;
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE_NAME;
@@ -30,57 +31,6 @@ export const handler = async (event) => {
     const response = await getOpenAIResponse(apiKey, action, messages);
     const { promptTokens, completionTokens, receivedUsage, fullResponse } = await processOpenAIStream(response, connectionId, sessionId, statusFlags);
 
-    /*
-    let promptTokens = 0;
-    let completionTokens = 0;
-    let receivedUsage = false;
-    let fullResponse = "";
-
-    // ✅ Process OpenAI Streaming
-
-    for await (const chunk of response) {
-      if (chunk.usage) {
-        promptTokens = chunk.usage.prompt_tokens;
-        completionTokens = chunk.usage.completion_tokens;
-        receivedUsage = true;
-      }
-
-      if (statusFlags.timeoutTriggered || statusFlags.isCanceled) {
-        console.log(`🛑 Stopping streaming for session ${sessionId}`);
-
-        if (statusFlags.isCanceled) {
-          await apiGateway.send(new PostToConnectionCommand({
-            ConnectionId: connectionId,
-            Data: JSON.stringify({ canceled: true }),
-          }));
-
-          await dynamoDB.send(new UpdateCommand({
-            TableName: CONNECTIONS_TABLE,
-            Key: { sessionId },
-            UpdateExpression: "REMOVE canceled",
-          }));
-        }
-
-        if (statusFlags.timeoutTriggered) {
-          await apiGateway.send(new PostToConnectionCommand({
-            ConnectionId: connectionId,
-            Data: JSON.stringify({ timeout: true }),
-          }));
-        }
-
-        break;
-      }
-
-      const text = chunk.choices?.[0]?.delta?.content || "";
-      if (text) {
-        await apiGateway.send(new PostToConnectionCommand({
-          ConnectionId: connectionId,
-          Data: JSON.stringify({ text }),
-        }));
-        fullResponse += text;
-      }
-    }*/
-
     clearTimeout(timeout);
 
     if (!statusFlags.timeoutTriggered && !statusFlags.isCanceled) {
@@ -94,23 +44,7 @@ export const handler = async (event) => {
       cost = estimateCost(messages, fullResponse, action);
     }
     
-    console.log("--- saving message to dynamo db ---");
-
-    // Determine messageindex 
-    const { Items } = await dynamoDB.send(new QueryCommand({
-      TableName: MESSAGES_TABLE,
-      KeyConditionExpression: "conversationId = :conversationId",
-      ExpressionAttributeValues: {
-        ":conversationId": conversationId
-      },
-      ScanIndexForward: false, // Get the latest message first
-      Limit: 1
-    }));
-
-    const messageIndex = (Items?.length > 0 ? Items[0].messageIndex : -1) + 1;
-
-    console.log("Conversation ID:", conversationId);
-    console.log("Message Index:", messageIndex);
+    const messageIndex = getNextMessageIndex(MESSAGES_TABLE, conversationId);
 
     const messageItem = {
       conversationId,
@@ -123,10 +57,7 @@ export const handler = async (event) => {
 
     console.log("Message Item:", messageItem);
     
-    await dynamoDB.send(new PutCommand({
-      TableName: MESSAGES_TABLE,
-      Item: messageItem,
-    }));
+    await putDynamoItem(MESSAGES_TABLE, messageItem);
 
     console.log("✅ Response sent successfully");
     return { statusCode: 200, body: "Response sent to client" };

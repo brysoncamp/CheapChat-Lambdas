@@ -14,3 +14,10 @@ export const getRecentMessages = async (tableName, conversationId, message, limi
 
   return messages;
 };
+
+export const getNextMessageIndex = async (tableName, conversationId) => {
+  const recentMessage = await queryLatestDynamo(tableName, "conversationId = :conversationId", { ":conversationId": conversationId }, 1);
+  const recentMessageIndex = recentMessage.length > 0 ? recentMessage[0].messageIndex : -1;
+  
+  return recentMessageIndex + 1;
+};
