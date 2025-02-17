@@ -11,7 +11,7 @@ export const getOpenAIResponse = async (apiKey, model, messages) => {
   });
 };
 
-export const processOpenAIStream = async (response, apiGateway, connectionId) => {
+export const processOpenAIStream = async (response, apiGateway, connectionId, statusFlags) => {
   let promptTokens = 0;
   let completionTokens = 0;
   let receivedUsage = false;

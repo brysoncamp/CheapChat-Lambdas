@@ -1,4 +1,3 @@
-// ✅ queryDynamo.mjs (loads only itself + dynamoClient.mjs)
 import dynamoDB from "./dynamoClient.mjs";
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 

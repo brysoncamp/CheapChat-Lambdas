@@ -4,6 +4,7 @@ import { calculateCost, estimateCost } from "/opt/nodejs/openAICost.mjs";
 import { getOpenAIResponse, processOpenAIStream } from "/opt/nodejs/openAIHelper.mjs";
 import { getRecentMessages } from "/opt/nodejs/messagesHelper.mjs";
 import { getOpenAIKey } from "/opt/nodejs/openAIKey.mjs";
+import { startTimeout, checkCancellation } from "opt/nodejs/statusHelper.mjs";
 
 const apiGateway = new ApiGatewayManagementApiClient({
   endpoint: process.env.WEBSOCKET_ENDPOINT,
@@ -18,7 +19,7 @@ export const handler = async (event) => {
   const { action, connectionId, sessionId, message, conversationId } = event;
   if (!action || !connectionId || !sessionId || !message || !conversationId) {
     return {
-      statusCode: 400,
+      statusCode: 400, 
       body: "Invalid request: Missing parameters",
     };
   }
@@ -27,44 +28,11 @@ export const handler = async (event) => {
     const messages = await getRecentMessages(MESSAGES_TABLE, conversationId, message, 5);
     const apiKey = await getOpenAIKey();
 
-    let isCanceled = false;
-    let timeoutTriggered = false;
-    const timeoutMs = 60000;
-
-    // ✅ Start a separate timeout that marks the request as timed out
-    const timeout = setTimeout(async () => {
-      console.log(`⚠️ Timeout reached for connection ${connectionId}`);
-      timeoutTriggered = true;
-    }, timeoutMs);
-
-    // ✅ Separate Cancellation Check Loop
-    const checkCancellation = async () => {
-      while (!isCanceled && !timeoutTriggered) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        try {
-          const checkResult = await dynamoDB.send(new GetCommand({
-            TableName: CONNECTIONS_TABLE,
-            Key: { sessionId },
-          }));
-
-          if (checkResult.Item?.canceled) {
-            isCanceled = true;
-          }
-        } catch (err) {
-          console.error(`❌ Error checking session cancellation: ${err.message}`);
-        }
-      }
-    };
-
-    // ✅ Start cancellation check in parallel
-    checkCancellation();
+    const statusFlags = { isCanceled: false, timeoutTriggered: false };
+    const timeout = startTimeout(statusFlags, 60000);
+    checkCancellation(CONNECTIONS_TABLE, statusFlags);
 
     const response = await getOpenAIResponse(apiKey, action, messages);
-
-
-
-    console.log(`🔹 Streaming OpenAI response back to WebSocket client: ${connectionId}`);
 
     let promptTokens = 0;
     let completionTokens = 0;
@@ -79,10 +47,10 @@ export const handler = async (event) => {
         receivedUsage = true;
       }
 
-      if (timeoutTriggered || isCanceled) {
+      if (statusFlags.timeoutTriggered || statusFlags.isCanceled) {
         console.log(`🛑 Stopping streaming for session ${sessionId}`);
 
-        if (isCanceled) {
+        if (statusFlags.isCanceled) {
           await apiGateway.send(new PostToConnectionCommand({
             ConnectionId: connectionId,
             Data: JSON.stringify({ canceled: true }),
@@ -95,7 +63,7 @@ export const handler = async (event) => {
           }));
         }
 
-        if (timeoutTriggered) {
+        if (statusFlags.timeoutTriggered) {
           await apiGateway.send(new PostToConnectionCommand({
             ConnectionId: connectionId,
             Data: JSON.stringify({ timeout: true }),
@@ -104,8 +72,6 @@ export const handler = async (event) => {
 
         break;
       }
-
-      // console.log("Open AI Chunk:", chunk); // ✅ Log the chunk for debugging
 
       const text = chunk.choices?.[0]?.delta?.content || "";
       if (text) {
@@ -117,7 +83,6 @@ export const handler = async (event) => {
       }
     }
 
-    // ✅ Clear timeout if OpenAI finished before 60s
     clearTimeout(timeout);
 
     // ✅ If request wasn't canceled, send "done"
