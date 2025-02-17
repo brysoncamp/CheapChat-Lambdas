@@ -1,14 +1,9 @@
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
-
 import { calculateCost, estimateCost } from "/opt/nodejs/openAICost.mjs";
 import { getOpenAIResponse, processOpenAIStream } from "/opt/nodejs/openAIHelper.mjs";
 import { getRecentMessages } from "/opt/nodejs/messagesHelper.mjs";
 import { getOpenAIKey } from "/opt/nodejs/openAIKey.mjs";
 import { startTimeout, checkCancellation } from "/opt/nodejs/statusHelper.mjs";
-
-/*const apiGateway = new ApiGatewayManagementApiClient({
-  endpoint: process.env.WEBSOCKET_ENDPOINT,
-});*/
+import { sendMessage } from "/opt/nodejs/apiGateway.mjs";
 
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME;
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE_NAME;
@@ -33,7 +28,7 @@ export const handler = async (event) => {
     checkCancellation(CONNECTIONS_TABLE, statusFlags);
 
     const response = await getOpenAIResponse(apiKey, action, messages);
-    const { promptTokens, completionTokens, receivedUsage, fullResponse } = await processOpenAIStream(response, apiGateway, connectionId, statusFlags);
+    const { promptTokens, completionTokens, receivedUsage, fullResponse } = await processOpenAIStream(response, connectionId, statusFlags);
 
     /*
     let promptTokens = 0;
@@ -89,14 +84,10 @@ export const handler = async (event) => {
     clearTimeout(timeout);
 
     if (!statusFlags.timeoutTriggered && !statusFlags.isCanceled) {
-      await apiGateway.send(new PostToConnectionCommand({
-        ConnectionId: connectionId,
-        Data: JSON.stringify({ done: true }),
-      }));
+      sendMessage(connectionId, { done: true });
     }
 
     let cost;
-
     if (receivedUsage) {
       cost = calculateCost(promptTokens, completionTokens, action);
     } else {
