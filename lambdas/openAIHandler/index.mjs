@@ -26,7 +26,7 @@ export const handler = async (event) => {
 
     const statusFlags = { isCanceled: false, timeoutTriggered: false };
     const timeout = startTimeout(statusFlags, 60000);
-    checkCancellation(CONNECTIONS_TABLE, statusFlags);
+    checkCancellation(CONNECTIONS_TABLE, sessionId, statusFlags);
 
     const response = await getOpenAIResponse(apiKey, action, messages);
     const { promptTokens, completionTokens, receivedUsage, fullResponse } = await processOpenAIStream(response, connectionId, sessionId, statusFlags);
@@ -44,7 +44,7 @@ export const handler = async (event) => {
       cost = estimateCost(messages, fullResponse, action);
     }
     
-    const messageIndex = getNextMessageIndex(MESSAGES_TABLE, conversationId);
+    const messageIndex = await getNextMessageIndex(MESSAGES_TABLE, conversationId);
 
     const messageItem = {
       conversationId,

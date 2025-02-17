@@ -6,7 +6,7 @@ export const startTimeout = (statusFlags, timeoutMs) => {
   }, timeoutMs);
 };
 
-export const checkCancellation = async (tableName, statusFlags) => {
+export const checkCancellation = async (tableName, sessionId, statusFlags) => {
   while (!statusFlags.isCanceled && !statusFlags.timeoutTriggered) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
