@@ -1,37 +1,16 @@
-import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
-
-/*import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { GetCommand, UpdateCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";*/
 
 import { calculateCost, estimateCost } from "/opt/nodejs/openAICost.mjs";
 import { getOpenAIResponse, processOpenAIStream } from "/opt/nodejs/openAIHelper.mjs";
 import { getRecentMessages } from "/opt/nodejs/messagesHelper.mjs";
+import { getOpenAIKey } from "/opt/nodejs/openAIKey.mjs";
 
-// Initialize AWS Clients
-const secretsManager = new SecretsManagerClient({});
 const apiGateway = new ApiGatewayManagementApiClient({
   endpoint: process.env.WEBSOCKET_ENDPOINT,
 });
 
-// const dynamoDB = new DynamoDBClient({});
-
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME;
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE_NAME;
-
-// Fetch OpenAI API Key (cached)
-let cachedApiKey = null;
-const getOpenAIKey = async () => {
-  if (cachedApiKey) return cachedApiKey;
-  try {
-    const data = await secretsManager.send(new GetSecretValueCommand({ SecretId: "OpenAISecrets" }));
-    cachedApiKey = JSON.parse(data.SecretString).OPENAI_API_KEY;
-    return cachedApiKey;
-  } catch (error) {
-    console.error("❌ Error retrieving API Key:", error);
-    throw new Error("Failed to retrieve OpenAI API Key");
-  }
-};
 
 export const handler = async (event) => {
   console.log("🟢 OpenAI Handler Event:", JSON.stringify(event, null, 2));
@@ -45,45 +24,8 @@ export const handler = async (event) => {
   }
 
   try {
-
     const messages = await getRecentMessages(MESSAGES_TABLE, conversationId, message, 5);
-
-    /*
-    const { Items: recentMessages = [] } = await dynamoDB.send(new QueryCommand({
-      TableName: MESSAGES_TABLE,
-      KeyConditionExpression: "conversationId = :conversationId",
-      ExpressionAttributeValues: {
-        ":conversationId": conversationId
-      },
-      ScanIndexForward: false, // Get the latest messages first
-      Limit: 5
-    }));
-    
-    // ✅ Ensure we have a safe array and reverse for correct order
-    const messages = [];
-    for (const msg of recentMessages.reverse()) { 
-      if (msg.query) messages.push({ role: "user", content: msg.query });
-      if (msg.response) messages.push({ role: "assistant", content: msg.response });
-    }
-    
-    // ✅ Always add the new user message
-    messages.push({ role: "user", content: message });
-
-    // const messages = await getRecentMessages(conversationId, message, 5);
-
-
-
-    
-    */
-
-
-
-    
-    console.log("🟢 Final messages array:", messages);
-
-    console.log(`🔹 Sending message to OpenAI: ${message}`);
     const apiKey = await getOpenAIKey();
-    //const openai = new OpenAI({ apiKey });
 
     let isCanceled = false;
     let timeoutTriggered = false;
