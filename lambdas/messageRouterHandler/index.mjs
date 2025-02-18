@@ -26,6 +26,8 @@ export const handler = async (event) => {
   let connectionId;
   let conversationId = eventConversationId;
 
+  let backgroundTasks = [];
+
   try {
     const result = await dynamoDB.send(
       new GetCommand({
@@ -43,7 +45,7 @@ export const handler = async (event) => {
     if (!conversationId) {
       conversationId = result.Item.conversationId;
       console.log("FIRST MESSGE IN CONVERSATION - GENERATE NAME", conversationId);
-      nameConversation(message);
+      backgroundTasks.push(nameConversation(message));
     }
     
     console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);
@@ -99,13 +101,17 @@ export const handler = async (event) => {
     console.log(`🔹 Forwarding message to ${functionName}...`);
     const payload = { action, connectionId, message, sessionId, conversationId };
 
-    await lambda.send(
-      new InvokeCommand({
-        FunctionName: functionName,
-        InvocationType: "Event",
-        Payload: Buffer.from(JSON.stringify(payload)),
-      })
+    backgroundTasks.push(
+      lambda.send(
+        new InvokeCommand({
+          FunctionName: functionName,
+          InvocationType: "Event",
+          Payload: Buffer.from(JSON.stringify(payload)),
+        })
+      )
     );
+
+    await Promise.allSettled(backgroundTasks);
 
     console.log(`✅ Message forwarded to ${functionName}`);
     return { statusCode: 200, body: `Message forwarded to ${functionName}` };
