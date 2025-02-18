@@ -9,23 +9,41 @@ const dynamoDB = new DynamoDBClient({});
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME;
 const CONVERSATIONS_TABLE = process.env.CONVERSATIONS_TABLE_NAME;
 
-const nameConversation = async (message, connectionId) => {
-  const { name, cost } = await generateName(message);
-  console.log("Name", name);
-  console.log("Cost", cost);
+const nameConversation = async (message, conversationId, connectionId) => {
+  try {
+    // ✅ Generate conversation name
+    const { name, cost } = await generateName(message);
+    console.log("✅ Name generated:", name);
+    console.log("💰 Cost:", cost);
 
-  await dynamoDB.send(new UpdateCommand({
-    TableName: CONVERSATIONS_TABLE,
-    Key: { conversationId }, // Ensure your primary key is "conversationId"
-    UpdateExpression: "SET title = :title",
-    ExpressionAttributeValues: {
-      ":title": name
+    // ✅ Attempt to update DynamoDB
+    try {
+      await dynamoDB.send(new UpdateCommand({
+        TableName: CONVERSATIONS_TABLE,
+        Key: { conversationId }, // Ensure "conversationId" is the primary key
+        UpdateExpression: "SET title = :title",
+        ExpressionAttributeValues: {
+          ":title": name
+        }
+      }));
+      console.log(`✅ Title updated for conversationId: ${conversationId}`);
+    } catch (dbError) {
+      console.error(`❌ Failed to update title in DynamoDB for ${conversationId}:`, dbError);
     }
-  }));
 
-  await sendMessage(connectionId, { title: name });
+    // ✅ Attempt to send message even if the DB update failed
+    try {
+      await sendMessage(connectionId, { title: name });
+      console.log(`✅ Title sent to client for connectionId: ${connectionId}`);
+    } catch (wsError) {
+      console.error(`❌ Failed to send title to WebSocket for ${connectionId}:`, wsError);
+    }
 
-}
+  } catch (nameError) {
+    console.error("❌ Error generating name:", nameError);
+  }
+};
+
 
 export const handler = async (event) => {
   console.log("🟢 WebSocket Message Event:", JSON.stringify(event, null, 2));
