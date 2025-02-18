@@ -2,10 +2,16 @@ import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { sendMessage } from "/opt/nodejs/apiGateway.mjs";
+import { generateName } from "/opt/nodejs/openAINamer.mjs";
 
 const lambda = new LambdaClient({});
 const dynamoDB = new DynamoDBClient({});
 const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
+
+const nameConversation = async (message) => {
+  const name = generateName(message);
+  console.log("Name response", name);
+}
 
 export const handler = async (event) => {
   console.log("🟢 WebSocket Message Event:", JSON.stringify(event, null, 2));
@@ -37,6 +43,7 @@ export const handler = async (event) => {
     if (!conversationId) {
       conversationId = result.Item.conversationId;
       console.log("FIRST MESSGE IN CONVERSATION - GENERATE NAME", conversationId);
+      nameConversation(message);
     }
     
     console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);

@@ -44,3 +44,13 @@ export const processOpenAIStream = async (response, connectionId, sessionId, sta
 
   return { promptTokens, completionTokens, receivedUsage, fullResponse };
 };
+
+export const getOpenAIResponseNoStream = async (apiKey, model, messages) => {
+  const openai = new OpenAI({ apiKey });
+
+  return await openai.chat.completions.create({
+    model: model,
+    messages: messages,
+    stream: false
+  });
+}
