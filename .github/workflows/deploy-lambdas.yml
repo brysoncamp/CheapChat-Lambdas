@@ -86,17 +86,22 @@ jobs:
               fi
             done
 
-            # Ensure that CLEANED_OLD_LAYERS is not empty
+            # Ensure CLEANED_OLD_LAYERS is properly formatted
+            CLEANED_OLD_LAYERS=$(echo "$CLEANED_OLD_LAYERS" | xargs) # Remove extra spaces
+
+            # If CLEANED_OLD_LAYERS is empty, use only the new layer
             if [[ -z "$CLEANED_OLD_LAYERS" ]]; then
-              echo "No existing layers found, applying only the new layer."
+              echo "No existing layers found for $FUNCTION, applying only the new layer."
               aws lambda update-function-configuration \
                 --function-name "$FUNCTION" \
                 --layers "$NEW_LAYER_ARN"
             else
+              echo "Updating function: $FUNCTION with layers: $CLEANED_OLD_LAYERS $NEW_LAYER_ARN"
               aws lambda update-function-configuration \
                 --function-name "$FUNCTION" \
-                --layers $CLEANED_OLD_LAYERS "$NEW_LAYER_ARN"
+                --layers "$CLEANED_OLD_LAYERS" "$NEW_LAYER_ARN"
             fi
+
           done
 
   # --------------
