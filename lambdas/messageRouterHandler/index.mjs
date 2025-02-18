@@ -6,12 +6,25 @@ import { generateName } from "/opt/nodejs/openAINamer.mjs";
 
 const lambda = new LambdaClient({});
 const dynamoDB = new DynamoDBClient({});
-const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
+const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME;
+const CONVERSATIONS_TABLE = process.env.CONVERSATIONS_TABLE_NAME;
 
-const nameConversation = async (message) => {
+const nameConversation = async (message, connectionId) => {
   const { name, cost } = await generateName(message);
   console.log("Name", name);
   console.log("Cost", cost);
+
+  await dynamoDB.send(new UpdateCommand({
+    TableName: CONVERSATIONS_TABLE,
+    Key: { conversationId }, // Ensure your primary key is "conversationId"
+    UpdateExpression: "SET title = :title",
+    ExpressionAttributeValues: {
+      ":title": name
+    }
+  }));
+
+  await sendMessage(connectionId, { title: name });
+
 }
 
 export const handler = async (event) => {
@@ -46,7 +59,7 @@ export const handler = async (event) => {
     if (!conversationId) {
       conversationId = result.Item.conversationId;
       console.log("FIRST MESSGE IN CONVERSATION - GENERATE NAME", conversationId);
-      backgroundTasks.push(nameConversation(message));
+      backgroundTasks.push(nameConversation(message, connectionId));
     }
     
     console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);
