@@ -1,5 +1,6 @@
 import { getOpenAIKey } from "/opt/nodejs/openAIKey.mjs";
 import { getOpenAIResponseNoStream } from "/opt/nodejs/openAIHelper.mjs";
+import { calculateCost } from "/opt/nodejs/openAICost.mjs";
 
 export const generateName = async (message) => {
     console.log("Generating name for conversation based on message:", message);
@@ -12,9 +13,10 @@ export const generateName = async (message) => {
     ];
 
     const response = await getOpenAIResponseNoStream(apiKey, "gpt-4o-mini", messages);
-
-
-    console.log("OpenAI Response:", response);
-    //const text = response.choices[0].text;
-    return response;
+    console.log("OpenAI Message:", response.choices[0].message);
+    
+    const name = response.choices[0].message.content;
+    const cost = calculateCost(response.usage.prompt_tokens, response.usage.completion_tokens, "gpt-4o-mini");
+    
+    return { name, cost };
 }

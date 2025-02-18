@@ -9,8 +9,9 @@ const dynamoDB = new DynamoDBClient({});
 const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
 
 const nameConversation = async (message) => {
-  const name = await generateName(message);
-  console.log("Name response", name);
+  const { name, cost } = await generateName(message);
+  console.log("Name", name);
+  console.log("Cost", cost);
 }
 
 export const handler = async (event) => {
