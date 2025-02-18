@@ -143,6 +143,7 @@ jobs:
           - openAIHandler
           - perplexityHandler
           - getChatHistory
+          - getRecentConversations
 
     steps:
       - name: Checkout code
