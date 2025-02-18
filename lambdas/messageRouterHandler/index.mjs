@@ -1,16 +1,11 @@
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+import { sendMessage } from "/opt/nodejs/apiGateway.mjs";
 
-// ✅ Initialize AWS Clients
 const lambda = new LambdaClient({});
 const dynamoDB = new DynamoDBClient({});
 const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
-
-const apiGateway = new ApiGatewayManagementApiClient({
-  endpoint: process.env.WEBSOCKET_ENDPOINT,
-});
 
 export const handler = async (event) => {
   console.log("🟢 WebSocket Message Event:", JSON.stringify(event, null, 2));
@@ -22,7 +17,6 @@ export const handler = async (event) => {
     return { statusCode: 400, body: "Invalid request: Missing sessionId or action" };
   }
 
-  // ✅ 1. Get WebSocket `connectionId` from sessionId
   let connectionId;
   let conversationId = eventConversationId;
 
@@ -40,18 +34,14 @@ export const handler = async (event) => {
     }
 
     connectionId = result.Item.connectionId;
-    
     if (!conversationId) {
       conversationId = result.Item.conversationId;
+      console.log("FIRST MESSGE IN CONVERSATION - GENERATE NAME", conversationId);
     }
-
+    
     console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);
 
-    await apiGateway.send(new PostToConnectionCommand({
-      ConnectionId: connectionId, // ✅ Correct placement
-      Data: JSON.stringify({ conversationId: conversationId }) // ✅ Send only conversationId inside Data
-    }));
-
+    await sendMessage(connectionId, { conversationId });
 
   } catch (error) {
     console.error("❌ Error fetching connectionId from DynamoDB:", error);

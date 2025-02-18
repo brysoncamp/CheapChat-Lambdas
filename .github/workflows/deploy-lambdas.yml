@@ -9,7 +9,7 @@ jobs:
   deploy-layers:
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 1  # ensures sequential layer publishing/updates
+      max-parallel: 1
       matrix:
         layer:
           - openAILayer
@@ -58,7 +58,7 @@ jobs:
           declare -A LAYER_FUNCTIONS=(
             ["openAILayer"]="openAIHandler"
             ["modelLayer"]="openAIHandler"
-            ["awsLayer"]="openAIHandler"
+            ["awsLayer"]="openAIHandler messageRouterHandler"
           )
 
           FUNCTIONS="${LAYER_FUNCTIONS["${{ matrix.layer }}"]}"
