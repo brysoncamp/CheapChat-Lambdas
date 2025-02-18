@@ -76,11 +76,14 @@ jobs:
               --query 'Layers[].Arn' \
               --output text 2>/dev/null | tr '\n' ' ')
 
-            # 4) (NEW) Filter out any layer ARN that references the same layer NAME
-            #    to avoid having multiple versions of the same layer on the function.
+            # 4) Remove None or empty values
+            if [[ -z "$OLD_LAYERS" || "$OLD_LAYERS" == "None" ]]; then
+              OLD_LAYERS=""
+            fi
+
+            # 5) Filter out any layer ARN that references the same layer NAME
             CLEANED_OLD_LAYERS=""
             for L in $OLD_LAYERS; do
-              # If $L doesn't contain ":layer:${{ matrix.layer }}:" then keep it
               if [[ "$L" != *":layer:${{ matrix.layer }}:"* ]]; then
                 CLEANED_OLD_LAYERS="$CLEANED_OLD_LAYERS $L"
               fi
@@ -89,20 +92,30 @@ jobs:
             # Ensure CLEANED_OLD_LAYERS is properly formatted
             CLEANED_OLD_LAYERS=$(echo "$CLEANED_OLD_LAYERS" | xargs) # Removes extra spaces
 
-            # Combine old layers with new ARN in a properly formatted way
+            # 6) Combine old layers with new ARN properly
             if [[ -z "$CLEANED_OLD_LAYERS" ]]; then
               FINAL_LAYERS="$NEW_LAYER_ARN"
             else
               FINAL_LAYERS="$CLEANED_OLD_LAYERS $NEW_LAYER_ARN"
             fi
 
-            # Debugging output
-            echo "Updating function: $FUNCTION with layers: $FINAL_LAYERS"
+            # 7) Ensure FINAL_LAYERS does not contain None
+            FINAL_LAYERS=$(echo "$FINAL_LAYERS" | sed 's/None//g' | xargs)
 
-            # Ensure correct spacing and remove unexpected commas or brackets
+            # 8) Convert to array format for AWS CLI
+            LAYER_ARGS=()
+            for LAYER in $FINAL_LAYERS; do
+              LAYER_ARGS+=("$LAYER")
+            done
+
+            # Debugging output
+            echo "Updating function: $FUNCTION with layers: ${LAYER_ARGS[@]}"
+
+            # 9) Update function with properly formatted layers
             aws lambda update-function-configuration \
               --function-name "$FUNCTION" \
-              --layers $FINAL_LAYERS
+              --layers "${LAYER_ARGS[@]}"
+
 
 
           done
