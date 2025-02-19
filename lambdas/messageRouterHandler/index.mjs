@@ -142,7 +142,7 @@ export const handler = async (event) => {
       
       //conversationId = result.Item.conversationId;
       console.log("FIRST MESSGE IN CONVERSATION - GENERATE NAME", conversationId);
-      backgroundTasks.push(nameConversation(message, conversationId, connectionId));
+      backgroundTasks.push(nameConversation(message, conversationId, connectionId, result.Item.userId));
     }
     
     console.log(`✅ Retrieved connectionId: ${connectionId} for sessionId: ${sessionId}`);
