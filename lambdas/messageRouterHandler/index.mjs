@@ -24,7 +24,7 @@ const putItem = async (table, item, condition = null) => {
   }
 };
 
-const nameConversation = async (message, conversationId, connectionId) => {
+const nameConversation = async (message, conversationId, connectionId, userId) => {
   try {
     // ✅ Generate conversation name
     const { name, cost } = await generateName(message);
