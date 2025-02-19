@@ -8,7 +8,7 @@ export const generateName = async (message) => {
     const apiKey = await getOpenAIKey();
 
     const messages = [
-        { role: "system", content: "Generate a title for a conversation based on the following message in 6 words or less." },
+        { role: "system", content: "Generate a title for a conversation based on the following message in 3 or 4 words. Avoid unnecessary punctuation." },
         { role: "user", content: message },
     ];
 
