@@ -149,6 +149,10 @@ export const handler = async (event) => {
       return { statusCode: 401, body: "Unauthorized: Missing token or sessionId" };
     }
 
+
+    const userId2 = event.requestContext?.authorizer?.jwt?.claims?.sub;
+    console.log("✅ User ID 2:", userId2);
+
     // ✅ Verify Token
     const decodedToken = await verifyToken(token);
     const userId = decodedToken.sub;
