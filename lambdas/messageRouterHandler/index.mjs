@@ -41,6 +41,7 @@ const nameConversation = async (message, conversationId, connectionId, userId) =
           ":title": name
         }
       }));*/
+      const ttl = Math.floor(Date.now() / 1000) + 3600;
 
       await putItem(
         CONVERSATIONS_TABLE,
