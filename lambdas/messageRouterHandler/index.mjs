@@ -1,13 +1,28 @@
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, UpdateCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { sendMessage } from "/opt/nodejs/apiGateway.mjs";
 import { generateName } from "/opt/nodejs/openAINamer.mjs";
+
+import { randomUUID } from "crypto";
 
 const lambda = new LambdaClient({});
 const dynamoDB = new DynamoDBClient({});
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME;
 const CONVERSATIONS_TABLE = process.env.CONVERSATIONS_TABLE_NAME;
+
+const putItem = async (table, item, condition = null) => {
+  try {
+    const params = { TableName: table, Item: item };
+    if (condition) params.ConditionExpression = condition;
+
+    console.log(`🔹 Writing to DynamoDB: ${JSON.stringify(params)}`);
+    await dynamoDB.send(new PutCommand(params));
+  } catch (error) {
+    console.error(`❌ Failed to put item into ${table}: ${error.message}`);
+    throw new Error("Database insert failed");
+  }
+};
 
 const nameConversation = async (message, conversationId, connectionId) => {
   try {
@@ -18,14 +33,27 @@ const nameConversation = async (message, conversationId, connectionId) => {
 
     // ✅ Attempt to update DynamoDB
     try {
-      await dynamoDB.send(new UpdateCommand({
+      /*await dynamoDB.send(new UpdateCommand({
         TableName: CONVERSATIONS_TABLE,
         Key: { conversationId }, // Ensure "conversationId" is the primary key
         UpdateExpression: "SET title = :title",
         ExpressionAttributeValues: {
           ":title": name
         }
-      }));
+      }));*/
+
+      await putItem(
+        CONVERSATIONS_TABLE,
+        {
+          conversationId: conversationId,
+          userId: userId,
+          title: name,
+          createdAt: Date.now(),
+          lastMessageAt: Date.now(),
+          deleteAt: ttl + 2592000,
+        },
+        "attribute_not_exists(conversationId)"
+      );
       console.log(`✅ Title updated for conversationId: ${conversationId}`);
     } catch (dbError) {
       console.error(`❌ Failed to update title in DynamoDB for ${conversationId}:`, dbError);
@@ -43,6 +71,34 @@ const nameConversation = async (message, conversationId, connectionId) => {
     console.error("❌ Error generating name:", nameError);
   }
 };
+
+
+const generateUniqueConversationId = async () => {
+  let conversationId;
+  let exists = true;
+  let attempts = 0;
+  const MAX_ATTEMPTS = 5;
+
+  while (exists && attempts < MAX_ATTEMPTS) {
+    conversationId = randomUUID();
+    attempts++;
+    try {
+      const { Item } = await dynamoDB.send(
+        new GetCommand({
+          TableName: CONVERSATIONS_TABLE,
+          Key: { conversationId: conversationId },
+        })
+      );
+      exists = !!Item;
+    } catch (error) {
+      console.warn(`⚠️ DynamoDB lookup failed (attempt ${attempts}): ${error.message}`);
+      exists = false;
+    }
+  }
+
+  return exists ? randomUUID() : conversationId;
+};
+
 
 
 export const handler = async (event) => {
@@ -75,7 +131,16 @@ export const handler = async (event) => {
 
     connectionId = result.Item.connectionId;
     if (!conversationId) {
-      conversationId = result.Item.conversationId;
+
+      // generate conversation id
+      conversationId = await generateUniqueConversationId();
+      if (!conversationId) {
+        console.error("❌ Failed to generate conversation ID");
+        return { statusCode: 500, body: "Internal Server Error: Failed to create conversation" };
+      }
+      
+      
+      //conversationId = result.Item.conversationId;
       console.log("FIRST MESSGE IN CONVERSATION - GENERATE NAME", conversationId);
       backgroundTasks.push(nameConversation(message, conversationId, connectionId));
     }
