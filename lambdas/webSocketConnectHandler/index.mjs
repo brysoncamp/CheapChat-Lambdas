@@ -150,8 +150,8 @@ export const handler = async (event) => {
     }
 
 
-    const userId2 = event.requestContext?.authorizer?.jwt?.claims?.sub;
-    console.log("✅ User ID 2:", userId2);
+    //const userId2 = event.requestContext?.authorizer?.jwt?.claims?.sub;
+    // console.log("✅ User ID 2:", userId2);
 
     // ✅ Verify Token
     const decodedToken = await verifyToken(token);
@@ -170,7 +170,7 @@ export const handler = async (event) => {
         console.error(`❌ Unauthorized access attempt by User: ${userId}`);
         return { statusCode: 403, body: "Forbidden: Unauthorized conversation access." };
       }
-    } else {
+    } /* else {
       // ✅ Generate new conversationId & store in Conversations Table
       conversationId = await generateUniqueConversationId();
       if (!conversationId) {
@@ -192,7 +192,7 @@ export const handler = async (event) => {
         },
         "attribute_not_exists(conversationId)"
       );
-    }
+    }*/
 
     // ✅ Store WebSocket connection
     await dynamoDB.send(
