@@ -68,9 +68,14 @@ export const handler = async (event) => {
     console.log(`✅ Retrieved ${messages.length} messages`);
 
     // ✅ Return messages to the client
+    // ✅ Return messages and conversation title to the client
     return {
         statusCode: 200,
         headers: { "Access-Control-Allow-Origin": allowOrigin },
-        body: JSON.stringify({ messages })
+        body: JSON.stringify({ 
+            title: conversation.title,
+            messages 
+        })
     };
+
 };
