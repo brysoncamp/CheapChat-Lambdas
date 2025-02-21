@@ -211,76 +211,64 @@ let sendTimers = {};
 let sentCitations = {};
 
 const processMessage = async (message, connectionId) => {
-    console.log('Processing message:', message);
+  console.log('Processing message:', message);
     
-    try {
-        const cleanMessage = message.replace(/^data: /, '').trim();
-        if (cleanMessage) {
-            const data = JSON.parse(cleanMessage);
-            console.log('Data processed:', data);
+  try {
+    const cleanMessage = message.replace(/^data: /, '').trim();
+    if (cleanMessage) {
+      const data = JSON.parse(cleanMessage);
+      console.log('Data processed:', data);
 
-            if (data.choices && data.choices.length > 0) {
-                const messageContent = data.choices[0].message.content;
-                console.log('Message Content:', messageContent);
+      if (data.choices && data.choices.length > 0) {
+        const messageContent = data.choices[0].message.content;
+        console.log('Message Content:', messageContent);
 
-                const finished = data.choices[0]?.finish_reason === "stop";
-                const citations = data.citations || [];
+        const finished = data.choices[0]?.finish_reason === "stop";
+        const citations = data.citations || [];
 
-                // Store citations **only if they haven’t been sent before**
-                if (citations.length > 0 && !sentCitations[connectionId]) {
-                    citationQueue[connectionId] = citations;
-                    sentCitations[connectionId] = true; // Prevent duplicate sending
-                }
-
-                if (messageContent) {
-                    // Store the latest message in the queue
-                    messageQueue[connectionId] = messageContent;
-                }
-
-                // If a timer does not exist, start one
-                if (!sendTimers[connectionId]) {
-                    sendTimers[connectionId] = setTimeout(async () => {
-                        await sendLatestMessage(connectionId);
-                    }, 50); // Small delay to batch updates
-                }
-
-                if (finished) {
-                    console.log('Finished processing message:', message);
-
-                    if (messageQueue[connectionId] || citationQueue[connectionId]) {
-                        console.log(`Waiting for last message to send before "done" for ${connectionId}...`);
-                        await sendLatestMessage(connectionId); // Ensure last queued message is sent
-                    }
-
-                    /*
-                    setTimeout(async () => {
-                        await apiGateway.send(new PostToConnectionCommand({
-                            ConnectionId: connectionId,
-                            Data: JSON.stringify({ done: true }),
-                        }));    
-                        console.log("Done signal sent.");
-                    }, 100);*/
-
-                    // Cleanup connection's message queue and timer
-                    delete messageQueue[connectionId];
-                    delete citationQueue[connectionId];
-                    delete sendTimers[connectionId];
-                    delete sentCitations[connectionId]; // Reset citations for the next session
-
-                    //const promptTokens = data.usage?.prompt_tokens || 0;
-                    //const completionTokens = data.usage?.completion_tokens || 0;
-                    //const usage = data.usage;
-                    console.log("--------------------");
-                    console.log("Sending data", messageContent, data.usage);
-                    console.log("Message", message);
-
-                    return { fullResponse: messageContent, usage: data.usage, citations: data?.citations };
-                }
-            }
+        // Store citations **only if they haven’t been sent before**
+        if (citations.length > 0 && !sentCitations[connectionId]) {
+          citationQueue[connectionId] = citations;
+          sentCitations[connectionId] = true; // Prevent duplicate sending
         }
-    } catch (error) {
-        console.error('Error processing message:', error);
+
+        if (messageContent) {
+          // Store the latest message in the queue
+          messageQueue[connectionId] = messageContent;
+        }
+
+        // If a timer does not exist, start one
+        if (!sendTimers[connectionId]) {
+          sendTimers[connectionId] = setTimeout(async () => {
+            await sendLatestMessage(connectionId);
+          }, 50); // Small delay to batch updates
+        }
+
+        if (finished) {
+          console.log('Finished processing message:', message);
+
+          if (messageQueue[connectionId] || citationQueue[connectionId]) {
+            console.log(`Waiting for last message to send before "done" for ${connectionId}...`);
+            await sendLatestMessage(connectionId); // Ensure last queued message is sent
+          }
+
+          // Cleanup connection's message queue and timer
+          delete messageQueue[connectionId];
+          delete citationQueue[connectionId];
+          delete sendTimers[connectionId];
+          delete sentCitations[connectionId]; // Reset citations for the next session
+
+          console.log("--------------------");
+          console.log("Sending data", messageContent, data.usage, data?.citations);
+          console.log("Message", message);
+        }
+        
+        return { fullResponse: messageContent, usage: data.usage, citations: data?.citations };
+      }
     }
+  } catch (error) {
+    console.error('Error processing message:', error);
+  }
 };
 
 // Function to send the latest queued message (including citations first)
