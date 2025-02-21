@@ -20,6 +20,8 @@ export const processOpenAIStream = async (response, connectionId, sessionId, sta
   let fullResponse = "";
 
   for await (const chunk of response) {
+    console.log("Chunk:", chunk);
+
     if (chunk.usage) {
       promptTokens = chunk.usage.prompt_tokens;
       completionTokens = chunk.usage.completion_tokens;
