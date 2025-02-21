@@ -32,94 +32,106 @@ const getPerplexityKey = async () => {
 };
 
 const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, statusFlags) => {
-    const postData = JSON.stringify({
-      model: action,
-      messages: messages,
-      stream: true,
-    });
-  
-    const options = {
-      hostname: 'api.perplexity.ai',
-      path: '/chat/completions',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      }
-    };
-  
-    return new Promise((resolve, reject) => {
-      const req = https.request(options, (res) => {
-        let buffer = '';
-        let fullResponse = '';
-        let promptTokens = 0;
-        let completionTokens = 0;
-  
-        res.on('data', async (chunk) => {
-          buffer += chunk.toString();
-          let boundary = buffer.lastIndexOf('\n');
-          if (boundary !== -1) {
-            let completeMessages = buffer.slice(0, boundary);
-            buffer = buffer.slice(boundary + 1);
-            for (const message of completeMessages.split('\n')) {
-              if (message.trim()) {
-                const processedData = await processMessage(message, connectionId);
-                if (processedData?.fullResponse) {
-                  fullResponse = processedData.fullResponse;
-                  promptTokens = processedData.promptTokens;
-                  completionTokens = processedData.completionTokens;
-                }
-              }
-            };
-          }
-        });
-  
-        res.on('end', async () => {
-          if (buffer.trim().length > 0) {
-            console.log("the res.on('end') buffer is actually being used");
-            const processedData = await processMessage(buffer, connectionId);
-            if (processedData?.fullResponse) {
-              fullResponse = processedData.fullResponse;
-              promptTokens = processedData.promptTokens;
-              completionTokens = processedData.completionTokens;
-            }
-          } else {
-            console.log('Stream ended without final data. Assume last processed message was final.');
-          }
-
-          await new Promise(resolve => setTimeout(resolve, 50));
-
-          resolve({ 
-            fullResponse: fullResponse, 
-            promptTokens: promptTokens, 
-            completionTokens: completionTokens 
-          });
-
-        });
+  try {
+      const postData = JSON.stringify({
+          model: action,
+          messages: messages,
+          stream: true,
       });
-  
-      req.on('error', (e) => {
-        console.error(`Problem with request: ${e.message}`);
-        reject(e);
+
+      const options = {
+          hostname: 'api.perplexity.ai',
+          path: '/chat/completions',
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+          }
+      };
+
+      return new Promise((resolve, reject) => {
+          try {
+              const req = https.request(options, (res) => {
+                  let buffer = '';
+                  let fullResponse = '';
+                  let promptTokens = 0;
+                  let completionTokens = 0;
+
+                  res.on('data', async (chunk) => {
+                      try {
+                          buffer += chunk.toString();
+                          let boundary = buffer.lastIndexOf('\n');
+                          if (boundary !== -1) {
+                              let completeMessages = buffer.slice(0, boundary);
+                              buffer = buffer.slice(boundary + 1);
+                              for (const message of completeMessages.split('\n')) {
+                                  if (message.trim()) {
+                                      const processedData = await processMessage(message, connectionId);
+                                      if (processedData?.fullResponse) {
+                                          fullResponse = processedData.fullResponse;
+                                          promptTokens = processedData.promptTokens;
+                                          completionTokens = processedData.completionTokens;
+                                      }
+                                  }
+                              }
+                          }
+                      } catch (error) {
+                          console.error(`Error processing response data: ${error.message}`);
+                      }
+                  });
+
+                  res.on('end', async () => {
+                      try {
+                          if (buffer.trim().length > 0) {
+                              console.log("the res.on('end') buffer is actually being used");
+                              const processedData = await processMessage(buffer, connectionId);
+                              if (processedData?.fullResponse) {
+                                  fullResponse = processedData.fullResponse;
+                                  promptTokens = processedData.promptTokens;
+                                  completionTokens = processedData.completionTokens;
+                              }
+                          } else {
+                              console.log('Stream ended without final data. Assume last processed message was final.');
+                          }
+
+                          await new Promise(resolve => setTimeout(resolve, 50));
+
+                          resolve({ 
+                              fullResponse: fullResponse, 
+                              promptTokens: promptTokens, 
+                              completionTokens: completionTokens 
+                          });
+                      } catch (error) {
+                          console.error(`Error handling end of response: ${error.message}`);
+                          reject(error);
+                      }
+                  });
+              });
+
+              req.on('error', (e) => {
+                  console.error(`Problem with request: ${e.message}`);
+                  reject(e);
+              });
+
+              req.write(postData);
+              req.end();
+          } catch (error) {
+              console.error(`Error during HTTP request setup: ${error.message}`);
+              reject(error);
+          }
       });
-  
-      req.write(postData);
-      req.end();
-    });
-  };
-  
-  
-
-// Helper function to process each message
-// Helper function to process each message
-// Helper function to process each message
+  } catch (error) {
+      console.error(`Unexpected error in fetchPerplexityResponse: ${error.message}`);
+      throw error;
+  }
+};
 
 
 
-let messageQueue = {}; // Stores the latest message for each connectionId
-let citationQueue = {}; // Stores citations for each connectionId (only once)
-let sendTimers = {}; // Keeps track of timeouts for each connectionId
-let sentCitations = {}; // Track whether citations have been sent for a connection
+let messageQueue = {};
+let citationQueue = {};
+let sendTimers = {};
+let sentCitations = {};
 
 const processMessage = async (message, connectionId) => {
     console.log('Processing message:', message);
