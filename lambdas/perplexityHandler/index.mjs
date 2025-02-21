@@ -32,99 +32,168 @@ const getPerplexityKey = async () => {
   }
 };
 
+/* return new Promise((resolve, reject) => {
+    try {
+        const req = https.request(options, (res) => {
+            let buffer = '';
+            let latestResponse = { fullResponse: '', usage: undefined, citations: undefined };
+
+            const processQueue = [];
+
+            res.on('data', (chunk) => {
+                buffer += chunk.toString();
+                let boundary = buffer.lastIndexOf('\n');
+                if (boundary !== -1) {
+                    let completeMessages = buffer.slice(0, boundary);
+                    buffer = buffer.slice(boundary + 1);
+
+                    completeMessages.split('\n').forEach(message => {
+                        if (message.trim()) {
+                            processQueue.push(
+                                processMessage(message, connectionId).then(processedData => {
+                                    if (processedData?.fullResponse) {
+                                        if (statusFlags.timeoutTriggered || statusFlags.isCanceled) {
+                                            abortController.abort();
+                                        } else {
+                                            latestResponse = {
+                                                fullResponse: processedData.fullResponse,
+                                                usage: processedData.usage,
+                                                citations: processedData.citations
+                                            };
+                                        }
+                                    }
+                                }).catch(error => {
+                                    console.error('Error in processing message:', error);
+                                })
+                            );
+                        }
+                    });
+                }
+            });
+
+            res.on('end', () => {
+                Promise.all(processQueue).then(() => {
+                    resolve({
+                        fullResponse: latestResponse.fullResponse,
+                        usage: latestResponse.usage,
+                        citations: latestResponse.citations
+                    });
+                }).catch(error => {
+                    console.error('Error in final message processing:', error);
+                    reject(error);
+                });
+            });
+        });
+
+        req.on('error', (e) => {
+            console.error(`Problem with request: ${e.message}`);
+            reject(e);
+        });
+
+        req.write(postData);
+        req.end();
+    } catch (error) {
+        console.error(`Error during HTTP request setup: ${error.message}`);
+        reject(error);
+    }
+});
+ */
+
 const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, statusFlags) => {
   try {
-      const postData = JSON.stringify({
-          model: action,
-          messages: messages,
-          stream: true,
-      });
+    const postData = JSON.stringify({
+      model: action,
+      messages: messages,
+      stream: true,
+    });
 
-      const options = {
-          hostname: 'api.perplexity.ai',
-          path: '/chat/completions',
-          method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`
-          }
-      };
+    const abortController = new AbortController();
+    const { signal } = abortController;
 
-      return new Promise((resolve, reject) => {
-          try {
-              const req = https.request(options, (res) => {
-                  let buffer = '';
-                  let fullResponse = '';
-                  let usage;
-                  let citations;
+    const options = {
+      hostname: 'api.perplexity.ai',
+      path: '/chat/completions',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      signal: signal
+    };
 
-                  res.on('data', (chunk) => {
-                    try {
-                      buffer += chunk.toString();
-                      let boundary = buffer.lastIndexOf('\n');
-                      if (boundary !== -1) {
-                        let completeMessages = buffer.slice(0, boundary);
-                        buffer = buffer.slice(boundary + 1);
-                        for (const message of completeMessages.split('\n')) {
-                          if (message.trim()) {
-                            processMessage(message, connectionId)
-                              .then((processedData) => {
-                                if (processedData?.fullResponse) {
-                                  fullResponse = processedData.fullResponse;
-                                  usage = processedData.usage;
-                                  citations = processedData.citations;
-                                }
-                            });
-                          }
-                        }
+    return new Promise((resolve, reject) => {
+
+      let latestResponse = { fullResponse: '', usage: null, citations: null };
+      const processQueue = [];
+
+      try {
+        const req = https.request(options, (res) => {
+          
+          let buffer = '';
+
+          res.on('data', (chunk) => {
+            if (statusFlags.timeoutTriggered || statusFlags.isCanceled) {
+              abortController.abort();
+            }
+
+            buffer += chunk.toString();
+            let boundary = buffer.lastIndexOf('\n');
+            if (boundary !== -1) {
+              let completeMessages = buffer.slice(0, boundary);
+              buffer = buffer.slice(boundary + 1);
+
+              completeMessages.split('\n').forEach(message => {
+                if (message.trim()) {
+                  processQueue.push(
+                    processMessage(message, connectionId).then(processedData => {
+                      if (processedData?.fullResponse) {
+                        latestResponse = {
+                          fullResponse: processedData.fullResponse,
+                          usage: processedData.usage,
+                          citations: processedData.citations
+                        };
                       }
-                    } catch (error) {
-                      console.error(`Error processing response data: ${error.message}`);
-                    }
-                  });
-
-                  res.on('end', async () => {
-                      try {
-                          /*if (buffer.trim().length > 0) {
-                              console.log("the res.on('end') buffer is actually being used");
-                              const processedData = await processMessage(buffer, connectionId);
-                              if (processedData?.fullResponse) {
-                                  fullResponse = processedData.fullResponse;
-                                  promptTokens = processedData.promptTokens;
-                                  completionTokens = processedData.completionTokens;
-                              }
-                          } else {
-                              console.log('Stream ended without final data. Assume last processed message was final.');
-                          }*/
-
-                          await new Promise(resolve => setTimeout(resolve, 50));
-
-                          resolve({ 
-                            fullResponse: fullResponse, 
-                            usage: usage
-                          });
-                      } catch (error) {
-                          console.error(`Error handling end of response: ${error.message}`);
-                          reject(error);
-                      }
-                  });
+                    }).catch(error => {
+                      console.error('Error in processing message:', error);
+                    })
+                  );
+                }
               });
+            }
+          });
 
-              req.on('error', (e) => {
-                  console.error(`Problem with request: ${e.message}`);
-                  reject(e);
-              });
+          res.on('end', () => {
+            // Finalize processing on end for normal completion
+            Promise.allSettled(processQueue).then(() => {
+              resolve(latestResponse);
+            });
+          });
+  
+          res.on('close', () => {
+            // Ensure final cleanup if close occurs unexpectedly
+            Promise.allSettled(processQueue).then(() => {
+              resolve(latestResponse);
+            });
+          });
+        });
 
-              req.write(postData);
-              req.end();
-          } catch (error) {
-              console.error(`Error during HTTP request setup: ${error.message}`);
-              reject(error);
-          }
-      });
+        req.on('error', () => {
+          // Handle error and resolve with the latest data, regardless of error cause
+          Promise.allSettled(processQueue).finally(() => {
+            resolve(latestResponse);
+          });
+        });
+
+        req.write(postData);
+        req.end();
+      } catch (error) {
+        console.error(`Error during HTTP request setup: ${error.message}`);
+        reject(error);
+      }
+    });
   } catch (error) {
-      console.error(`Unexpected error in fetchPerplexityResponse: ${error.message}`);
-      throw error;
+    console.error(`Unexpected error in fetchPerplexityResponse: ${error.message}`);
+    throw error;
   }
 };
 
