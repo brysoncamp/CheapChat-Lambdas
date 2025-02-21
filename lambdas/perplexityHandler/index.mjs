@@ -276,8 +276,8 @@ export const handler = async (event) => {
     const { fullResponse, usage } = await fetchPerplexityResponse(apiKey, action, messages, connectionId, statusFlags);
     console.log("Response from perplexity completed!");
     console.log("Full Response:", fullResponse);
-    console.log("Prompt Tokens:", promptTokens);
-    console.log("Completion Tokens:", completionTokens);
+    //console.log("Prompt Tokens:", promptTokens);
+    //console.log("Completion Tokens:", completionTokens);
 
     clearTimeout(timeout);
 
