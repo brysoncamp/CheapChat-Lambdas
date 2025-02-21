@@ -5,7 +5,7 @@ import https from "https";
 
 import { getRecentMessages, getNextMessageIndex } from "/opt/nodejs/messagesHelper.mjs";
 import { startTimeout, checkCancellation } from "/opt/nodejs/statusHelper.mjs";
-
+import { sendMessage } from "/opt/nodejs/apiGateway.mjs";
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
@@ -54,8 +54,7 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
               const req = https.request(options, (res) => {
                   let buffer = '';
                   let fullResponse = '';
-                  let promptTokens = 0;
-                  let completionTokens = 0;
+                  let usage;
 
                   res.on('data', (chunk) => {
                     try {
@@ -70,8 +69,7 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
                               .then((processedData) => {
                                 if (processedData?.fullResponse) {
                                   fullResponse = processedData.fullResponse;
-                                  promptTokens = processedData.promptTokens;
-                                  completionTokens = processedData.completionTokens;
+                                  usage = processedData.usage;
                                 }
                             });
                           }
@@ -100,8 +98,7 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
 
                           resolve({ 
                             fullResponse: fullResponse, 
-                            promptTokens: promptTokens, 
-                            completionTokens: completionTokens 
+                            usage: usage
                           });
                       } catch (error) {
                           console.error(`Error handling end of response: ${error.message}`);
@@ -145,8 +142,8 @@ const processMessage = async (message, connectionId) => {
             console.log('Data processed:', data);
 
             if (data.choices && data.choices.length > 0) {
-                const deltaContent = data.choices[0].message.content;
-                console.log('Delta Content:', deltaContent);
+                const messageContent = data.choices[0].message.content;
+                console.log('Message Content:', messageContent);
 
                 const finished = data.choices[0]?.finish_reason === "stop";
                 const citations = data.citations || [];
@@ -157,9 +154,9 @@ const processMessage = async (message, connectionId) => {
                     sentCitations[connectionId] = true; // Prevent duplicate sending
                 }
 
-                if (deltaContent) {
+                if (messageContent) {
                     // Store the latest message in the queue
-                    messageQueue[connectionId] = deltaContent;
+                    messageQueue[connectionId] = messageContent;
                 }
 
                 // If a timer does not exist, start one
@@ -177,13 +174,14 @@ const processMessage = async (message, connectionId) => {
                         await sendLatestMessage(connectionId); // Ensure last queued message is sent
                     }
 
+                    /*
                     setTimeout(async () => {
                         await apiGateway.send(new PostToConnectionCommand({
                             ConnectionId: connectionId,
                             Data: JSON.stringify({ done: true }),
                         }));    
                         console.log("Done signal sent.");
-                    }, 100);
+                    }, 100);*/
 
                     // Cleanup connection's message queue and timer
                     delete messageQueue[connectionId];
@@ -191,10 +189,11 @@ const processMessage = async (message, connectionId) => {
                     delete sendTimers[connectionId];
                     delete sentCitations[connectionId]; // Reset citations for the next session
 
-                    const promptTokens = data.usage?.prompt_tokens || 0;
-                    const completionTokens = data.usage?.completion_tokens || 0;
+                    //const promptTokens = data.usage?.prompt_tokens || 0;
+                    //const completionTokens = data.usage?.completion_tokens || 0;
+                    const usage = data.usage;
 
-                    return { fullResponse: message, promptTokens, completionTokens };
+                    return { fullResponse: messageContent, usage };
                 }
             }
         }
@@ -232,6 +231,27 @@ const sendLatestMessage = async (connectionId) => {
     }
 };
 
+const modelCosts = {
+  "sonar-reasoning-pro": { "input": 0.000004, "output": 0.000016, "search": 0.01 },
+  "sonar-reasoning": { "input": 0.000002, "output": 0.00001, "search": 0.01  },
+  "sonar-pro": { "input": 0.000006, "output": 0.00003, "search": 0.01  },
+  "sonar": { "input": 0.000002, "output": 0.0000006, "search": 0.01  },
+  "r1-1776": { "input": 0.000004, "output": 0.000016 },
+};
+
+const calculateCost = (usage, model) => {
+  const priceData = modelCosts[model];
+  if (!priceData) throw new Error(`Unknown model: ${model}`);
+
+  let inputTokens = usage.promptTokens || 0;
+  if (usage.citation_tokens) inputTokens += usage.citation_tokens;
+
+  const num_searches = usage.num_search_queries || (priceData.search ? 1 : 0);
+
+  const unroundedCost = (inputTokens * priceData.input) + (usage.completionTokens * priceData.output) + (num_searches * priceData.search);
+  return Number(unroundedCost.toFixed(8));
+};
+
 // Main Lambda Handler
 export const handler = async (event) => {
   console.log("Perplexity Handler Event:", JSON.stringify(event, null, 2));
@@ -253,13 +273,21 @@ export const handler = async (event) => {
     const timeout = startTimeout(statusFlags, 60000);
     checkCancellation(CONNECTIONS_TABLE, sessionId, statusFlags);
 
-    const { fullResponse, promptTokens, completionTokens } = await fetchPerplexityResponse(apiKey, action, messages, connectionId, statusFlags);
+    const { fullResponse, usage } = await fetchPerplexityResponse(apiKey, action, messages, connectionId, statusFlags);
     console.log("Response from perplexity completed!");
     console.log("Full Response:", fullResponse);
     console.log("Prompt Tokens:", promptTokens);
     console.log("Completion Tokens:", completionTokens);
 
     clearTimeout(timeout);
+
+    if (!statusFlags.timeoutTriggered && !statusFlags.isCanceled) {
+      await sendMessage(connectionId, { done: true });
+    }
+
+    const cost = calculateCost(usage, action);
+    console.log("Calculated Cost:", cost);
+
 
     console.log("Response sent successfully");
     return { statusCode: 200, body: "Streaming response sent to client" };
