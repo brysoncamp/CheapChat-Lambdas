@@ -55,6 +55,7 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
                   let buffer = '';
                   let fullResponse = '';
                   let usage;
+                  let citations;
 
                   res.on('data', (chunk) => {
                     try {
@@ -70,6 +71,7 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
                                 if (processedData?.fullResponse) {
                                   fullResponse = processedData.fullResponse;
                                   usage = processedData.usage;
+                                  citations = processedData.citations;
                                 }
                             });
                           }
@@ -191,9 +193,12 @@ const processMessage = async (message, connectionId) => {
 
                     //const promptTokens = data.usage?.prompt_tokens || 0;
                     //const completionTokens = data.usage?.completion_tokens || 0;
-                    const usage = data.usage;
+                    //const usage = data.usage;
+                    console.log("--------------------");
+                    console.log("Sending data", messageContent, data.usage);
+                    console.log("Message", message);
 
-                    return { fullResponse: messageContent, usage };
+                    return { fullResponse: messageContent, usage: data.usage, citations: data?.citations };
                 }
             }
         }
@@ -207,7 +212,7 @@ const sendLatestMessage = async (connectionId) => {
     try {
         // Send citations **only if they exist and haven’t been sent yet**
         if (citationQueue[connectionId]) {
-            await apiGateway.send(new PostToConnectionCommand({
+            await apiGateway.send(new PostToConnectionCommand({     
                 ConnectionId: connectionId,
                 Data: JSON.stringify({ citations: citationQueue[connectionId] }),
             }));
@@ -224,7 +229,7 @@ const sendLatestMessage = async (connectionId) => {
             console.log(`Sent message to ${connectionId}:`, messageQueue[connectionId]);
             delete messageQueue[connectionId];
         }
-
+ 
         delete sendTimers[connectionId]; // Cleanup timer reference
     } catch (error) {
         console.error(`Error sending message to ${connectionId}:`, error);
@@ -273,7 +278,7 @@ export const handler = async (event) => {
     const timeout = startTimeout(statusFlags, 60000);
     checkCancellation(CONNECTIONS_TABLE, sessionId, statusFlags);
 
-    const { fullResponse, usage } = await fetchPerplexityResponse(apiKey, action, messages, connectionId, statusFlags);
+    const { fullResponse, usage, citations } = await fetchPerplexityResponse(apiKey, action, messages, connectionId, statusFlags);
     console.log("Response from perplexity completed!");
     console.log("Full Response:", fullResponse);
     //console.log("Prompt Tokens:", promptTokens);
@@ -287,6 +292,25 @@ export const handler = async (event) => {
 
     const cost = calculateCost(usage, action);
     console.log("Calculated Cost:", cost);
+
+    const messageIndex = await getNextMessageIndex(MESSAGES_TABLE, conversationId);
+    
+    const messageItem = {
+      conversationId,
+      messageIndex,
+      query: message,
+      response: fullResponse,
+      model: action,
+      cost: cost
+    };
+
+    if (citations && citations.length > 0) {
+      messageItem.citations = citations;
+    }
+
+    console.log("Message Item:", messageItem);
+    
+    await putDynamoItem(MESSAGES_TABLE, messageItem);
 
 
     console.log("Response sent successfully");
