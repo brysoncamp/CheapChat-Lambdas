@@ -117,6 +117,23 @@ export const handler = async (event) => {
 
   let backgroundTasks = [];
 
+  // ✅ 2. Handle CANCEL request BEFORE ANYTHING ELSE
+  if (action === "cancel") {
+    console.log(`🚫 Cancel request received for session: ${sessionId}`);
+
+    await dynamoDB.send(
+      new UpdateCommand({
+        TableName: CONNECTIONS_TABLE,
+        Key: { sessionId },
+        UpdateExpression: "SET canceled = :canceled",
+        ExpressionAttributeValues: { ":canceled": true },
+      })
+    );
+
+    return { statusCode: 200, body: "Processing canceled" };
+  }
+
+
   try {
     const result = await dynamoDB.send(
       new GetCommand({
@@ -155,22 +172,7 @@ export const handler = async (event) => {
     return { statusCode: 500, body: "Failed to retrieve WebSocket connection" };
   }
 
-  // ✅ 2. Handle CANCEL request before invoking OpenAI Lambda
-  if (action === "cancel") {
-    console.log(`🚫 Cancel request received for session: ${sessionId}`);
-
-    await dynamoDB.send(
-      new UpdateCommand({
-        TableName: CONNECTIONS_TABLE,
-        Key: { sessionId },
-        UpdateExpression: "SET canceled = :canceled",
-        ExpressionAttributeValues: { ":canceled": true },
-      })
-    );
-
-    return { statusCode: 200, body: "Processing canceled" };
-  }
-
+  
   // ✅ 3. Route messages to OpenAI Lambda
   const lambdaFunctionMap = { 
     "gpt-4o": "openAIHandler",
