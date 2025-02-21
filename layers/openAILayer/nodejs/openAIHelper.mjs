@@ -13,7 +13,7 @@ export const getOpenAIResponse = async (apiKey, model, messages) => {
   });
 };
 
-export const processOpenAIStream = async (response, connectionId, sessionId, statusFlags) => {
+export const processOpenAIStream = async (response, connectionId, sessionId, statusFlags, CONNECTIONS_TABLE) => {
   let promptTokens = 0;
   let completionTokens = 0;
   let receivedUsage = false;
