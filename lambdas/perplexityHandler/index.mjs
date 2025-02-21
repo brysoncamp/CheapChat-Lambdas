@@ -243,12 +243,12 @@ const calculateCost = (usage, model) => {
   const priceData = modelCosts[model];
   if (!priceData) throw new Error(`Unknown model: ${model}`);
 
-  let inputTokens = usage.promptTokens || 0;
+  let inputTokens = usage.prompt_tokens || 0;
   if (usage.citation_tokens) inputTokens += usage.citation_tokens;
 
   const num_searches = usage.num_search_queries || (priceData.search ? 1 : 0);
 
-  const unroundedCost = (inputTokens * priceData.input) + (usage.completionTokens * priceData.output) + (num_searches * priceData.search);
+  const unroundedCost = (inputTokens * priceData.input) + (usage.completion_tokens * priceData.output) + (num_searches * priceData.search);
   return Number(unroundedCost.toFixed(8));
 };
 
