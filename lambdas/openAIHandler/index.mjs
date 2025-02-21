@@ -33,9 +33,10 @@ export const handler = async (event) => {
 
     clearTimeout(timeout);
 
-    if (!statusFlags.timeoutTriggered && !statusFlags.isCanceled) {
+    /*if (!statusFlags.timeoutTriggered && !statusFlags.isCanceled) {
       await sendMessage(connectionId, { done: true });
-    }
+    }*/
+    await sendMessage(connectionId, { done: true });
 
     let cost;
     if (receivedUsage) {

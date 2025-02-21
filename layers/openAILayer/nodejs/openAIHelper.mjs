@@ -30,8 +30,8 @@ export const processOpenAIStream = async (response, connectionId, sessionId, sta
 
     if (statusFlags.timeoutTriggered || statusFlags.isCanceled) {
       console.log("Conversation cancelled or timeout triggered");
-      const message = statusFlags.isCanceled ? { canceled: true } : { timeout: true };
-      await sendMessage(connectionId, message);
+      //const message = statusFlags.isCanceled ? { canceled: true } : { timeout: true };
+      //await sendMessage(connectionId, message);
 
       if (statusFlags.isCanceled) await removeDynamoAttribute(CONNECTIONS_TABLE, { sessionId }, "canceled");
       

@@ -262,7 +262,7 @@ const processMessage = async (message, connectionId) => {
           console.log("Sending data", messageContent, data.usage, data?.citations);
           console.log("Message", message);
         }
-        
+
         return { fullResponse: messageContent, usage: data.usage, citations: data?.citations };
       }
     }
@@ -350,9 +350,10 @@ export const handler = async (event) => {
 
     clearTimeout(timeout);
 
-    if (!statusFlags.timeoutTriggered && !statusFlags.isCanceled) {
+    /*if (!statusFlags.timeoutTriggered && !statusFlags.isCanceled) {
       await sendMessage(connectionId, { done: true });
-    }
+    }*/
+    await sendMessage(connectionId, { done: true });
 
     const cost = calculateCost(usage, action);
     console.log("Calculated Cost:", cost);
