@@ -132,10 +132,6 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
           let buffer = '';
 
           res.on('data', (chunk) => {
-            if (statusFlags.timeoutTriggered || statusFlags.isCanceled) {
-              abortController.abort();
-            }
-
             buffer += chunk.toString();
             let boundary = buffer.lastIndexOf('\n');
             if (boundary !== -1) {
@@ -146,12 +142,10 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
                 if (message.trim()) {
                   const processingPromise = processMessage(message, connectionId)
                     .then(processedData => {
+                      console.log("Processed Data:", processedData);  // Debug log
                       if (processedData?.fullResponse) {
-                        latestResponse = {
-                          fullResponse: processedData.fullResponse,
-                          usage: processedData.usage,
-                          citations: processedData.citations
-                        };
+                        latestResponse =
+                         { ...processedData }; // Update immediately
                       }
                     })
                     .catch(error => {
@@ -161,6 +155,10 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
                   processQueue.push(processingPromise);
                 }
               });
+            }
+
+            if (statusFlags.timeoutTriggered || statusFlags.isCanceled) {
+              abortController.abort();
             }
           });
 
