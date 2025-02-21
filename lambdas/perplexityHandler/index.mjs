@@ -6,6 +6,7 @@ import https from "https";
 import { getRecentMessages, getNextMessageIndex } from "/opt/nodejs/messagesHelper.mjs";
 import { startTimeout, checkCancellation } from "/opt/nodejs/statusHelper.mjs";
 import { sendMessage } from "/opt/nodejs/apiGateway.mjs";
+import { putDynamoItem } from "/opt/nodejs/dynamoDB/putDynamo.mjs";
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
