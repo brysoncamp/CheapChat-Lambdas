@@ -144,8 +144,8 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
 
               completeMessages.split('\n').forEach(message => {
                 if (message.trim()) {
-                  processQueue.push(
-                    processMessage(message, connectionId).then(processedData => {
+                  const processingPromise = processMessage(message, connectionId)
+                    .then(processedData => {
                       if (processedData?.fullResponse) {
                         latestResponse = {
                           fullResponse: processedData.fullResponse,
@@ -153,10 +153,12 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
                           citations: processedData.citations
                         };
                       }
-                    }).catch(error => {
-                      console.error('Error in processing message:', error);
                     })
-                  );
+                    .catch(error => {
+                      console.error('Error in processing message:', error);
+                    });
+                    
+                  processQueue.push(processingPromise);
                 }
               });
             }
@@ -164,14 +166,18 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
 
           res.on('end', () => {
             // Finalize processing on end for normal completion
+            console.log("RES.ON(END) OCCURING");
             Promise.allSettled(processQueue).then(() => {
+              console.log("RES.ON(END) OCCURING | LATEST RESPONSE", latestResponse);
               resolve(latestResponse);
             });
           });
   
           res.on('close', () => {
             // Ensure final cleanup if close occurs unexpectedly
+            console.log("RES.ON(CLOSE) OCCURING");
             Promise.allSettled(processQueue).then(() => {
+              console.log("RES.ON(CLOSE) OCCURING | LATEST RESPONSE", latestResponse);
               resolve(latestResponse);
             });
           });
@@ -179,7 +185,9 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
 
         req.on('error', () => {
           // Handle error and resolve with the latest data, regardless of error cause
+          console.log("REQ.ON(ERROR) OCCURING");
           Promise.allSettled(processQueue).finally(() => {
+            console.log("REQ.ON(ERROR) OCCURING | LATEST RESPONSE", latestResponse);
             resolve(latestResponse);
           });
         });
