@@ -29,7 +29,7 @@ export const handler = async (event) => {
     checkCancellation(CONNECTIONS_TABLE, sessionId, statusFlags);
 
     const response = await getOpenAIResponse(apiKey, action, messages);
-    const { promptTokens, completionTokens, receivedUsage, fullResponse } = await processOpenAIStream(response, connectionId, sessionId, statusFlags);
+    const { promptTokens, completionTokens, receivedUsage, fullResponse } = await processOpenAIStream(response, connectionId, sessionId, statusFlags, CONNECTIONS_TABLE);
 
     clearTimeout(timeout);
 
