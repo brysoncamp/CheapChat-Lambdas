@@ -58,7 +58,7 @@ jobs:
           declare -A LAYER_FUNCTIONS=(
             ["openAILayer"]="openAIHandler messageRouterHandler"
             ["modelLayer"]="openAIHandler perplexityHandler"
-            ["awsLayer"]="openAIHandler messageRouterHandler"
+            ["awsLayer"]="openAIHandler messageRouterHandler perplexityHandler"
           )
 
           FUNCTIONS="${LAYER_FUNCTIONS["${{ matrix.layer }}"]}"
