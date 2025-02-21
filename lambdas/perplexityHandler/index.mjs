@@ -57,32 +57,34 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
                   let promptTokens = 0;
                   let completionTokens = 0;
 
-                  res.on('data', async (chunk) => {
-                      try {
-                          buffer += chunk.toString();
-                          let boundary = buffer.lastIndexOf('\n');
-                          if (boundary !== -1) {
-                              let completeMessages = buffer.slice(0, boundary);
-                              buffer = buffer.slice(boundary + 1);
-                              for (const message of completeMessages.split('\n')) {
-                                  if (message.trim()) {
-                                      const processedData = await processMessage(message, connectionId);
-                                      if (processedData?.fullResponse) {
-                                          fullResponse = processedData.fullResponse;
-                                          promptTokens = processedData.promptTokens;
-                                          completionTokens = processedData.completionTokens;
-                                      }
-                                  }
-                              }
+                  res.on('data', (chunk) => {
+                    try {
+                      buffer += chunk.toString();
+                      let boundary = buffer.lastIndexOf('\n');
+                      if (boundary !== -1) {
+                        let completeMessages = buffer.slice(0, boundary);
+                        buffer = buffer.slice(boundary + 1);
+                        for (const message of completeMessages.split('\n')) {
+                          if (message.trim()) {
+                            processMessage(message, connectionId)
+                              .then((processedData) => {
+                                if (processedData?.fullResponse) {
+                                  fullResponse = processedData.fullResponse;
+                                  promptTokens = processedData.promptTokens;
+                                  completionTokens = processedData.completionTokens;
+                                }
+                            });
                           }
-                      } catch (error) {
-                          console.error(`Error processing response data: ${error.message}`);
+                        }
                       }
+                    } catch (error) {
+                      console.error(`Error processing response data: ${error.message}`);
+                    }
                   });
 
                   res.on('end', async () => {
                       try {
-                          if (buffer.trim().length > 0) {
+                          /*if (buffer.trim().length > 0) {
                               console.log("the res.on('end') buffer is actually being used");
                               const processedData = await processMessage(buffer, connectionId);
                               if (processedData?.fullResponse) {
@@ -92,14 +94,14 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
                               }
                           } else {
                               console.log('Stream ended without final data. Assume last processed message was final.');
-                          }
+                          }*/
 
                           await new Promise(resolve => setTimeout(resolve, 50));
 
                           resolve({ 
-                              fullResponse: fullResponse, 
-                              promptTokens: promptTokens, 
-                              completionTokens: completionTokens 
+                            fullResponse: fullResponse, 
+                            promptTokens: promptTokens, 
+                            completionTokens: completionTokens 
                           });
                       } catch (error) {
                           console.error(`Error handling end of response: ${error.message}`);
