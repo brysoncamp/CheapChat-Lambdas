@@ -57,7 +57,7 @@ jobs:
           # 2) Map each layer to one or more functions
           declare -A LAYER_FUNCTIONS=(
             ["openAILayer"]="openAIHandler messageRouterHandler"
-            ["modelLayer"]="openAIHandler"
+            ["modelLayer"]="openAIHandler perplexityHandler"
             ["awsLayer"]="openAIHandler messageRouterHandler"
           )
 

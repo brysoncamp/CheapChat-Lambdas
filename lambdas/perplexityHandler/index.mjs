@@ -1,7 +1,11 @@
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import https from 'https';
+import https from "https";
+
+import { getRecentMessages, getNextMessageIndex } from "/opt/nodejs/messagesHelper.mjs";
+import { startTimeout, checkCancellation } from "/opt/nodejs/statusHelper.mjs";
+
 
 // Initialize AWS Clients
 const secretsManager = new SecretsManagerClient({});
@@ -9,7 +13,9 @@ const apiGateway = new ApiGatewayManagementApiClient({
   endpoint: process.env.WEBSOCKET_ENDPOINT,
 });
 const dynamoDB = new DynamoDBClient({});
-const CONNECTIONS_TABLE = process.env.DYNAMO_DB_TABLE_NAME;
+
+const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE_NAME;
+const MESSAGES_TABLE = process.env.MESSAGES_TABLE_NAME;
 
 // Fetch Perplexity API Key (cached)
 let cachedApiKey = null;
@@ -24,13 +30,8 @@ const getPerplexityKey = async () => {
     throw new Error("Failed to retrieve Perplexity API Key");
   }
 };
-// Function to handle Perplexity API Request using native https module
 
-let isFirstData = true; // Flag to track if the current data is the first one processed
-
-// Function to handle Perplexity API Request using native https module
-const fetchPerplexityResponse = async (action, messages, connectionId, sessionId) => {
-    const apiKey = await getPerplexityKey();
+const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, statusFlags) => {
     const postData = JSON.stringify({
       model: action,
       messages: messages,
@@ -50,29 +51,50 @@ const fetchPerplexityResponse = async (action, messages, connectionId, sessionId
     return new Promise((resolve, reject) => {
       const req = https.request(options, (res) => {
         let buffer = '';
+        let fullResponse = '';
+        let promptTokens = 0;
+        let completionTokens = 0;
   
-        res.on('data', (chunk) => {
+        res.on('data', async (chunk) => {
           buffer += chunk.toString();
           let boundary = buffer.lastIndexOf('\n');
           if (boundary !== -1) {
             let completeMessages = buffer.slice(0, boundary);
             buffer = buffer.slice(boundary + 1);
-            completeMessages.split('\n').forEach(message => {
-              if (message.trim()) processMessage(message, connectionId);
-            });
+            for (const message of completeMessages.split('\n')) {
+              if (message.trim()) {
+                const processedData = await processMessage(message, connectionId);
+                if (processedData?.fullResponse) {
+                  fullResponse = processedData.fullResponse;
+                  promptTokens = processedData.promptTokens;
+                  completionTokens = processedData.completionTokens;
+                }
+              }
+            };
           }
         });
   
         res.on('end', async () => {
-          // Check if there's any remaining data in the buffer to process as potentially the last data
           if (buffer.trim().length > 0) {
-            processMessage(buffer, connectionId);
+            console.log("the res.on('end') buffer is actually being used");
+            const processedData = await processMessage(buffer, connectionId);
+            if (processedData?.fullResponse) {
+              fullResponse = processedData.fullResponse;
+              promptTokens = processedData.promptTokens;
+              completionTokens = processedData.completionTokens;
+            }
           } else {
-            // If no data is left, but the stream has ended, assume the last processed message was the final one
             console.log('Stream ended without final data. Assume last processed message was final.');
           }
 
           await new Promise(resolve => setTimeout(resolve, 50));
+
+          resolve({ 
+            fullResponse: fullResponse, 
+            promptTokens: promptTokens, 
+            completionTokens: completionTokens 
+          });
+
         });
       });
   
@@ -81,7 +103,6 @@ const fetchPerplexityResponse = async (action, messages, connectionId, sessionId
         reject(e);
       });
   
-      // Write data to request body
       req.write(postData);
       req.end();
     });
@@ -155,6 +176,11 @@ const processMessage = async (message, connectionId) => {
                     delete citationQueue[connectionId];
                     delete sendTimers[connectionId];
                     delete sentCitations[connectionId]; // Reset citations for the next session
+
+                    const promptTokens = data.usage?.prompt_tokens || 0;
+                    const completionTokens = data.usage?.completion_tokens || 0;
+
+                    return { fullResponse: message, promptTokens, completionTokens };
                 }
             }
         }
@@ -206,10 +232,20 @@ export const handler = async (event) => {
 
   try {
     console.log(`Sending message to Perplexity: ${message}`);
-    const messages = [{ role: "user", content: message }];
+    const messages = await getRecentMessages(MESSAGES_TABLE, conversationId, message, 5);
+    const apiKey = await getPerplexityKey();
 
-    // Fetch Perplexity Streaming Response
-    await fetchPerplexityResponse(action, messages, connectionId, sessionId);
+    const statusFlags = { isCanceled: false, timeoutTriggered: false };
+    const timeout = startTimeout(statusFlags, 60000);
+    checkCancellation(CONNECTIONS_TABLE, sessionId, statusFlags);
+
+    const { fullResponse, promptTokens, completionTokens } = await fetchPerplexityResponse(apiKey, action, messages, connectionId, statusFlags);
+    console.log("Response from perplexity completed!");
+    console.log("Full Response:", fullResponse);
+    console.log("Prompt Tokens:", promptTokens);
+    console.log("Completion Tokens:", completionTokens);
+
+    clearTimeout(timeout);
 
     console.log("Response sent successfully");
     return { statusCode: 200, body: "Streaming response sent to client" };
