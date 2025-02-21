@@ -187,7 +187,8 @@ export const handler = async (event) => {
     "sonar-reasoning-pro": "perplexityHandler",
     "sonar-reasoning": "perplexityHandler",
     "sonar-pro": "perplexityHandler",
-    "sonar": "perplexityHandler"
+    "sonar": "perplexityHandler",
+    "r1-1776": "perplexityHandler",
   };
 
   const functionName = lambdaFunctionMap[action];
