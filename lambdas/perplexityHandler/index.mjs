@@ -32,73 +32,6 @@ const getPerplexityKey = async () => {
   }
 };
 
-/* return new Promise((resolve, reject) => {
-    try {
-        const req = https.request(options, (res) => {
-            let buffer = '';
-            let latestResponse = { fullResponse: '', usage: undefined, citations: undefined };
-
-            const processQueue = [];
-
-            res.on('data', (chunk) => {
-                buffer += chunk.toString();
-                let boundary = buffer.lastIndexOf('\n');
-                if (boundary !== -1) {
-                    let completeMessages = buffer.slice(0, boundary);
-                    buffer = buffer.slice(boundary + 1);
-
-                    completeMessages.split('\n').forEach(message => {
-                        if (message.trim()) {
-                            processQueue.push(
-                                processMessage(message, connectionId).then(processedData => {
-                                    if (processedData?.fullResponse) {
-                                        if (statusFlags.timeoutTriggered || statusFlags.isCanceled) {
-                                            abortController.abort();
-                                        } else {
-                                            latestResponse = {
-                                                fullResponse: processedData.fullResponse,
-                                                usage: processedData.usage,
-                                                citations: processedData.citations
-                                            };
-                                        }
-                                    }
-                                }).catch(error => {
-                                    console.error('Error in processing message:', error);
-                                })
-                            );
-                        }
-                    });
-                }
-            });
-
-            res.on('end', () => {
-                Promise.all(processQueue).then(() => {
-                    resolve({
-                        fullResponse: latestResponse.fullResponse,
-                        usage: latestResponse.usage,
-                        citations: latestResponse.citations
-                    });
-                }).catch(error => {
-                    console.error('Error in final message processing:', error);
-                    reject(error);
-                });
-            });
-        });
-
-        req.on('error', (e) => {
-            console.error(`Problem with request: ${e.message}`);
-            reject(e);
-        });
-
-        req.write(postData);
-        req.end();
-    } catch (error) {
-        console.error(`Error during HTTP request setup: ${error.message}`);
-        reject(error);
-    }
-});
- */
-
 const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, statusFlags) => {
   try {
     const postData = JSON.stringify({
@@ -144,8 +77,7 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
                     .then(processedData => {
                       console.log("Processed Data:", processedData);  // Debug log
                       if (processedData?.fullResponse) {
-                        latestResponse =
-                         { ...processedData }; // Update immediately
+                        latestResponse = { ...processedData }; // Update immediately
                       }
                     })
                     .catch(error => {
@@ -202,8 +134,6 @@ const fetchPerplexityResponse = async (apiKey, action, messages, connectionId, s
     throw error;
   }
 };
-
-
 
 let messageQueue = {};
 let citationQueue = {};
@@ -316,12 +246,13 @@ const calculateCost = (usage, model) => {
   if (usage.citation_tokens) inputTokens += usage.citation_tokens;
 
   const num_searches = usage.num_search_queries || (priceData.search ? 1 : 0);
+  const searchCost = priceData.search ? (num_searches * priceData.search) : 0;
 
-  const unroundedCost = (inputTokens * priceData.input) + (usage.completion_tokens * priceData.output) + (num_searches * priceData.search);
+  const unroundedCost = (inputTokens * priceData.input) + (usage.completion_tokens * priceData.output) + searchCost;
   return Number(unroundedCost.toFixed(8));
 };
 
-// Main Lambda Handler
+
 export const handler = async (event) => {
   console.log("Perplexity Handler Event:", JSON.stringify(event, null, 2));
 
@@ -345,14 +276,9 @@ export const handler = async (event) => {
     const { fullResponse, usage, citations } = await fetchPerplexityResponse(apiKey, action, messages, connectionId, statusFlags);
     console.log("Response from perplexity completed!");
     console.log("Full Response:", fullResponse);
-    //console.log("Prompt Tokens:", promptTokens);
-    //console.log("Completion Tokens:", completionTokens);
 
     clearTimeout(timeout);
 
-    /*if (!statusFlags.timeoutTriggered && !statusFlags.isCanceled) {
-      await sendMessage(connectionId, { done: true });
-    }*/
     await sendMessage(connectionId, { done: true });
 
     const cost = calculateCost(usage, action);
@@ -376,7 +302,6 @@ export const handler = async (event) => {
     console.log("Message Item:", messageItem);
     
     await putDynamoItem(MESSAGES_TABLE, messageItem);
-
 
     console.log("Response sent successfully");
     return { statusCode: 200, body: "Streaming response sent to client" };
